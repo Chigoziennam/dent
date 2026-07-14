@@ -1,0 +1,180 @@
+import { useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { format, startOfWeek, addDays, parseISO } from 'date-fns'
+import { Copy, RefreshCw, Send, Check } from 'lucide-react'
+import { useShipLog, todayStr } from '../lib/store'
+import { generateContent } from '../lib/ai'
+import type { ContentPlatform, Tone } from '../lib/types'
+import { Page, GlassCard, CountUp, CategoryPill, SectionTitle, stagger } from '../components/ui'
+import { Typewriter } from '../components/Typewriter'
+
+const TABS: { key: ContentPlatform; label: string }[] = [
+  { key: 'twitter', label: '🐦 Tweet' },
+  { key: 'linkedin', label: '💼 LinkedIn' },
+  { key: 'newsletter', label: '📰 Newsletter' },
+]
+const TONES: Tone[] = ['founder', 'technical', 'storytelling']
+
+export default function Week() {
+  const { events, dailyLogs, profile, saveContent, publishChangelog } = useShipLog()
+  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => format(addDays(weekStart, i), 'yyyy-MM-dd')), [weekStart])
+  const weekEvents = useMemo(() => events.filter(e => days.includes(e.eventDate)), [events, days])
+  const weekLogs = useMemo(() => dailyLogs.filter(l => days.includes(l.logDate)), [dailyLogs, days])
+
+  const [selectedDay, setSelectedDay] = useState<string>(todayStr())
+  const [tab, setTab] = useState<ContentPlatform>('twitter')
+  const [tone, setTone] = useState<Tone>(profile.tone)
+  const [drafts, setDrafts] = useState<Partial<Record<string, string>>>({})
+  const [generating, setGenerating] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const draftKey = `${tab}-${tone}`
+  const draft = drafts[draftKey]
+
+  const generate = async () => {
+    setGenerating(true)
+    const text = await generateContent({
+      events: weekEvents, dailyLogs: weekLogs, platform: tab, tone,
+      projectName: profile.projectName, projectTagline: profile.projectTagline,
+    })
+    setDrafts(d => ({ ...d, [draftKey]: text }))
+    setGenerating(false)
+  }
+
+  const copy = async () => {
+    if (!draft) return
+    await navigator.clipboard.writeText(draft)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  const saveDraft = () => {
+    if (!draft) return
+    saveContent({ platform: tab, tone, title: `Week of ${format(weekStart, 'MMM d')}`, body: draft, status: 'draft' })
+  }
+
+  const publish = () => {
+    if (!draft) return
+    publishChangelog({ versionTag: '', title: `Week of ${format(weekStart, 'MMM d, yyyy')}`, body: draft })
+  }
+
+  const kpis = [
+    { label: 'Events Logged', value: weekEvents.length },
+    { label: 'Commits', value: weekEvents.filter(e => e.category === 'commit').length },
+    { label: 'Deploys', value: weekEvents.filter(e => e.category === 'deployment').length },
+    { label: 'XP Earned', value: weekEvents.length * 10 + weekLogs.length * 25, prefix: '+' },
+  ]
+  const dayEvents = weekEvents.filter(e => e.eventDate === selectedDay)
+
+  return (
+    <Page>
+      <motion.div initial="initial" animate="animate" variants={stagger}>
+        {/* KPIs */}
+        <motion.div variants={{ animate: { transition: { staggerChildren: 0.08 } } }} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {kpis.map(k => (
+            <GlassCard key={k.label} className="!p-4 text-center">
+              <CountUp value={k.value} prefix={k.prefix ?? ''} className="text-2xl font-bold text-primary" />
+              <div className="mt-0.5 text-xs text-secondary">{k.label}</div>
+            </GlassCard>
+          ))}
+        </motion.div>
+
+        {/* Day nodes */}
+        <GlassCard className="mt-4">
+          <SectionTitle>Week Timeline</SectionTitle>
+          <div className="flex items-start justify-between">
+            {days.map(d => {
+              const count = weekEvents.filter(e => e.eventDate === d).length
+              const isFuture = d > todayStr()
+              const active = selectedDay === d
+              return (
+                <button key={d} disabled={isFuture} onClick={() => setSelectedDay(d)} className="flex flex-1 flex-col items-center gap-1.5 disabled:opacity-30">
+                  <span className="text-[11px] font-medium text-secondary">{format(parseISO(d), 'EEE')}</span>
+                  <motion.div
+                    animate={active ? { scale: 1.15 } : { scale: 1 }}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full font-mono text-xs font-semibold transition-shadow ${active ? 'bg-accent text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]' : count > 0 ? 'bg-accent/15 text-accent' : 'bg-white/5 text-muted'}`}
+                  >
+                    {count}
+                  </motion.div>
+                  <span className="text-[10px] text-muted">{d === todayStr() ? 'Today' : format(parseISO(d), 'd')}</span>
+                </button>
+              )
+            })}
+          </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={selectedDay}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.25 }}
+              className="mt-4 space-y-2 border-t border-line pt-4"
+            >
+              {dayEvents.length === 0 && <p className="text-sm text-muted">No events on this day.</p>}
+              {dayEvents.map(e => (
+                <div key={e.id} className="flex items-center gap-2.5 text-sm">
+                  <CategoryPill category={e.category} />
+                  <span className="truncate text-primary">{e.title}</span>
+                </div>
+              ))}
+            </motion.div>
+          </AnimatePresence>
+        </GlassCard>
+
+        {/* AI content */}
+        <GlassCard className="mt-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-1.5">
+              {TABS.map(t => (
+                <button key={t.key} onClick={() => setTab(t.key)}
+                  className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${tab === t.key ? 'bg-accent/15 text-accent' : 'text-secondary hover:text-primary'}`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              {TONES.map(t => (
+                <button key={t} onClick={() => setTone(t)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-medium capitalize transition-colors ${tone === t ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted hover:text-secondary'}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 min-h-[180px] rounded-xl border border-line bg-white/[0.02] p-4">
+            {generating ? (
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity }}>
+                  ✨ ShipLog AI is writing from your {weekEvents.length} events…
+                </motion.span>
+              </div>
+            ) : draft ? (
+              <Typewriter text={draft} className="whitespace-pre-wrap text-sm leading-relaxed text-primary" />
+            ) : (
+              <p className="text-sm text-muted">Hit <span className="text-accent">Generate</span> and your week becomes a {tab === 'twitter' ? 'tweet' : tab} draft — in your {tone} voice.</p>
+            )}
+          </div>
+
+          <div className="mt-3.5 flex flex-wrap gap-2">
+            <motion.button whileTap={{ scale: 0.97 }} onClick={generate} disabled={generating}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-[13px] font-semibold text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] disabled:opacity-50">
+              <RefreshCw size={13} className={generating ? 'animate-spin' : ''} /> {draft ? 'Regenerate' : 'Generate'}
+            </motion.button>
+            <ActionBtn onClick={copy} icon={copied ? Check : Copy} label={copied ? 'Copied' : 'Copy'} disabled={!draft} />
+            <ActionBtn onClick={saveDraft} icon={Send} label="Save Draft" disabled={!draft} />
+            <ActionBtn onClick={publish} icon={Send} label="Publish to Changelog" disabled={!draft} />
+          </div>
+        </GlassCard>
+      </motion.div>
+    </Page>
+  )
+}
+
+function ActionBtn({ onClick, icon: Icon, label, disabled }: { onClick: () => void; icon: typeof Copy; label: string; disabled?: boolean }) {
+  return (
+    <motion.button whileTap={{ scale: 0.97 }} onClick={onClick} disabled={disabled}
+      className="flex items-center gap-1.5 rounded-lg border border-line px-3.5 py-2 text-[13px] font-medium text-secondary transition-colors hover:border-line-hover hover:text-primary disabled:opacity-40">
+      <Icon size={13} /> {label}
+    </motion.button>
+  )
+}

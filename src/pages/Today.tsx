@@ -1,16 +1,40 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { format } from 'date-fns'
-import { Plus, Sparkles, PenLine, Search, CalendarRange } from 'lucide-react'
+import { format, subDays } from 'date-fns'
+import { Plus, Sparkles, PenLine, Search, CalendarRange, Flame, Hammer } from 'lucide-react'
 import { useShipLog, todayStr } from '../lib/store'
 import { SOURCE_LABEL, levelForXP, type Mood } from '../lib/types'
-import { Page, GlassCard, StreakBadge, XPBar, Checkmark, SectionTitle, CategoryPill, stagger } from '../components/ui'
+import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill, stagger } from '../components/ui'
 import { AddEventModal } from '../components/AddEventModal'
+import { Mascot } from '../components/Mascot'
 
-const MOODS: { key: Mood; emoji: string }[] = [
-  { key: 'fire', emoji: '🔥' }, { key: 'good', emoji: '😊' }, { key: 'meh', emoji: '😐' },
-  { key: 'tough', emoji: '😓' }, { key: 'burned_out', emoji: '🫠' },
+// Builder moods — words first, not emoji soup
+const MOODS: { key: Mood; label: string; emoji: string }[] = [
+  { key: 'fire', label: 'Flow state', emoji: '🔥' },
+  { key: 'good', label: 'Solid', emoji: '💪' },
+  { key: 'meh', label: 'Grinding', emoji: '⛏️' },
+  { key: 'tough', label: 'Heavy day', emoji: '🌧️' },
+  { key: 'burned_out', label: 'On fumes', emoji: '🪫' },
+]
+
+// Rotating prompts so the logbook never feels like a form
+const PROMPTS = [
+  {
+    built: 'What did you ship today — even the small stuff?',
+    blocked: 'What fought back?',
+    learned: 'What do you know now that morning-you didn’t?',
+  },
+  {
+    built: 'What exists tonight that didn’t exist this morning?',
+    blocked: 'Where did you lose the most time?',
+    learned: 'What would you tell another builder facing the same day?',
+  },
+  {
+    built: 'What moved the project forward today?',
+    blocked: 'What almost made you close the laptop?',
+    learned: 'One lesson worth remembering in a month?',
+  },
 ]
 
 export default function Today() {
@@ -25,8 +49,26 @@ export default function Today() {
   const existingLog = dailyLogs.find(l => l.logDate === today)
   const level = levelForXP(profile.builderScore)
   const hour = new Date().getHours()
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const greeting = hour < 5 ? 'Late-night shift' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const xpToday = todaysEvents.length * 10 + (existingLog ? 25 : 0)
+  const prompts = PROMPTS[new Date().getDate() % PROMPTS.length]
+
+  // 14-day pulse: the shipping rhythm, front and center
+  const pulse = useMemo(() => {
+    return Array.from({ length: 14 }, (_, i) => {
+      const d = format(subDays(new Date(), 13 - i), 'yyyy-MM-dd')
+      return { date: d, count: events.filter(e => e.eventDate === d).length }
+    })
+  }, [events])
+  const maxPulse = Math.max(1, ...pulse.map(p => p.count))
+
+  // Last ship, for the project reminder
+  const lastShipTime = useMemo(
+    () => events.reduce<number>((max, e) => Math.max(max, new Date(e.eventTime).getTime()), 0),
+    [events],
+  )
+  const hoursSinceShip = lastShipTime ? Math.max(0, Math.round((Date.now() - lastShipTime) / 36e5)) : null
+  const streakAtRisk = todaysEvents.length === 0 && hour >= 15
 
   const [built, setBuilt] = useState(existingLog?.whatIBuilt ?? '')
   const [blocked, setBlocked] = useState(existingLog?.whatBlockedMe ?? '')
@@ -43,18 +85,99 @@ export default function Today() {
 
   return (
     <Page>
-      {/* Greeting */}
-      <motion.div initial="initial" animate="animate" variants={stagger} className="flex flex-wrap items-start justify-between gap-3">
-        <motion.div variants={{ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }}>
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{greeting}, {profile.displayName} 👋</h1>
-          <p className="mt-1 text-sm text-secondary">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
-        </motion.div>
-        <motion.div variants={{ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }}>
-          <StreakBadge days={profile.streakCurrent} />
-        </motion.div>
+      {/* ── Hero: greeting + streak ring + mascot ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: 'easeOut' }}
+        className="glass relative overflow-hidden !rounded-3xl p-6 md:p-8"
+      >
+        <div className="grid-bg pointer-events-none absolute inset-0" />
+        <div className="relative flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">{format(new Date(), 'EEEE · MMMM d')}</div>
+            <h1 className="mt-1.5 text-[26px] font-bold leading-tight tracking-tight md:text-4xl">
+              {greeting}, <span className="text-gradient">{profile.displayName}</span>
+            </h1>
+            <p className="mt-2 max-w-md text-[13.5px] leading-relaxed text-secondary">
+              {todaysEvents.length > 0
+                ? <>You've shipped <span className="font-semibold text-primary">{todaysEvents.length} {todaysEvents.length === 1 ? 'thing' : 'things'}</span> today. The log is watching — keep going.</>
+                : <>The workshop is quiet. One small ship is all it takes to keep the fire alive.</>}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2.5">
+              <StreakRing days={profile.streakCurrent} />
+              <div className="rounded-full border border-line bg-white/[0.03] px-3 py-1.5 font-mono text-xs text-secondary">
+                Lv {level.level} · {level.name}
+              </div>
+              <div className="rounded-full border border-line bg-white/[0.03] px-3 py-1.5 font-mono text-xs text-secondary">
+                +{xpToday} XP today
+              </div>
+            </div>
+          </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.25, type: 'spring', stiffness: 200, damping: 18 }}
+            className="hidden shrink-0 sm:block"
+          >
+            <Mascot size={116} />
+          </motion.div>
+        </div>
+
+        {/* Ship pulse — the main deal */}
+        <div className="relative mt-6">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">Ship pulse · last 14 days</span>
+            <span className="font-mono text-[10px] text-muted">{pulse.reduce((a, p) => a + p.count, 0)} ships</span>
+          </div>
+          <div className="flex h-16 items-end gap-1.5">
+            {pulse.map((p, i) => (
+              <motion.div
+                key={p.date}
+                initial={{ height: 0 }}
+                animate={{ height: `${Math.max(8, (p.count / maxPulse) * 100)}%` }}
+                transition={{ delay: 0.3 + i * 0.04, duration: 0.5, ease: 'easeOut' }}
+                title={`${p.date}: ${p.count} ships`}
+                className={`flex-1 rounded-t-md ${i === 13 ? 'bg-accent shadow-[0_0_16px_rgba(99,102,241,0.5)]' : p.count > 0 ? 'bg-accent/40' : 'bg-white/5'}`}
+              />
+            ))}
+          </div>
+        </div>
       </motion.div>
 
-      <motion.div initial="initial" animate="animate" variants={stagger} className="mt-6 grid gap-4 lg:grid-cols-5">
+      {/* ── Streak-risk / project reminder ── */}
+      <AnimatePresence>
+        {streakAtRisk ? (
+          <motion.button
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            onClick={() => setAddOpen(true)}
+            className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-warning/30 bg-warning/[0.07] p-4 text-left"
+          >
+            <Flame size={18} className="shrink-0 text-warning" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-primary">Your {profile.streakCurrent}-day streak is on the line</div>
+              <div className="text-xs text-secondary">Nothing logged today. One small ship before midnight keeps it alive — even a commit counts.</div>
+            </div>
+            <span className="shrink-0 rounded-lg bg-warning/15 px-3 py-1.5 text-xs font-semibold text-warning">Log a ship</span>
+          </motion.button>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+            className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-white/[0.02] p-4"
+          >
+            <Hammer size={18} className="shrink-0 text-accent" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-primary">{profile.projectName} is waiting on you</div>
+              <div className="text-xs text-secondary">
+                {hoursSinceShip !== null && hoursSinceShip < 24
+                  ? `Last ship ${hoursSinceShip <= 1 ? 'under an hour' : `${hoursSinceShip}h`} ago. The momentum is yours — what's next on ${profile.projectName}?`
+                  : `It's been a minute. Open the project, pick the smallest task, ship it.`}
+              </div>
+            </div>
+            <button onClick={() => setAddOpen(true)} className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent">
+              + Ship
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <motion.div initial="initial" animate="animate" variants={stagger} className="mt-4 grid gap-4 lg:grid-cols-5">
         {/* Today's progress */}
         <GlassCard className="lg:col-span-3">
           <div className="flex items-center justify-between">
@@ -99,12 +222,14 @@ export default function Today() {
         </GlassCard>
       </motion.div>
 
-      {/* Evening reflection */}
+      {/* ── The Builder's Logbook (evening reflection) ── */}
       <GlassCard className="mt-4 !p-0 overflow-hidden">
         <button onClick={() => setReflectOpen(o => !o)} className="flex w-full items-center justify-between p-5 text-left">
-          <div>
-            <span className="text-[15px] font-semibold">📝 Evening Reflection</span>
-            {existingLog && <span className="ml-2.5 text-xs text-success">saved ✓</span>}
+          <div className="min-w-0">
+            <span className="text-[15px] font-semibold">The Builder's Logbook</span>
+            {existingLog
+              ? <span className="ml-2.5 text-xs text-success">logged ✓</span>
+              : <span className="ml-2.5 text-xs text-muted">{hour >= 18 ? 'the day deserves a debrief' : 'opens properly after 6pm — early entries welcome'}</span>}
           </div>
           <motion.span animate={{ rotate: reflectOpen ? 180 : 0 }} className="text-muted">▾</motion.span>
         </button>
@@ -115,12 +240,15 @@ export default function Today() {
               transition={{ duration: 0.3, ease: 'easeOut' }}
             >
               <div className="space-y-3 px-5 pb-5">
-                <Field label="What did you build today?" value={built} onChange={setBuilt} />
-                <Field label="What blocked you?" value={blocked} onChange={setBlocked} />
-                <Field label="What did you learn?" value={learned} onChange={setLearned} />
+                <p className="text-xs leading-relaxed text-muted">
+                  Two minutes, honest answers. Future-you reads this when the motivation dips — write for them.
+                </p>
+                <Field label={prompts.built} value={built} onChange={setBuilt} placeholder="Even 'fixed one CSS bug' counts. Small ships stack." />
+                <Field label={prompts.blocked} value={blocked} onChange={setBlocked} placeholder="Name the wall. Tomorrow it's smaller." />
+                <Field label={prompts.learned} value={learned} onChange={setLearned} placeholder="The lesson you'd want back in a month." />
                 <div className="flex flex-wrap items-center gap-6">
                   <div>
-                    <div className="mb-1.5 text-xs font-medium text-secondary">Energy level</div>
+                    <div className="mb-1.5 text-xs font-medium text-secondary">Tank level</div>
                     <div className="flex gap-1.5">
                       {[1, 2, 3, 4, 5].map(n => (
                         <button key={n} onClick={() => setEnergy(n)}
@@ -131,12 +259,12 @@ export default function Today() {
                     </div>
                   </div>
                   <div>
-                    <div className="mb-1.5 text-xs font-medium text-secondary">Mood</div>
-                    <div className="flex gap-1.5">
+                    <div className="mb-1.5 text-xs font-medium text-secondary">How did the day fight?</div>
+                    <div className="flex flex-wrap gap-1.5">
                       {MOODS.map(m => (
                         <button key={m.key} onClick={() => setMood(m.key)}
-                          className={`h-9 w-9 rounded-lg border text-lg transition-all ${mood === m.key ? 'border-accent bg-accent/20 scale-110' : 'border-line opacity-60 hover:opacity-100'}`}>
-                          {m.emoji}
+                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${mood === m.key ? 'border-accent bg-accent/20 text-primary' : 'border-line text-muted hover:border-line-hover'}`}>
+                          <span>{m.emoji}</span> {m.label}
                         </button>
                       ))}
                     </div>
@@ -146,9 +274,9 @@ export default function Today() {
                   <motion.button
                     whileTap={{ scale: 0.97 }}
                     onClick={saveReflection}
-                    className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(99,102,241,0.3)]"
+                    className="sheen rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(99,102,241,0.3)]"
                   >
-                    {existingLog ? 'Update Reflection' : 'Save & Earn 25 XP'}
+                    {existingLog ? 'Update the log' : 'Close out the day · +25 XP'}
                   </motion.button>
                   <AnimatePresence>
                     {xpFloat && (
@@ -195,7 +323,46 @@ export default function Today() {
   )
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+// Animated circular streak ring with the flame at its heart
+function StreakRing({ days }: { days: number }) {
+  const pct = Math.min(1, (days % 30) / 30 || 1)
+  const r = 15
+  const c = 2 * Math.PI * r
+  return (
+    <div className="flex items-center gap-2.5 rounded-full border border-line bg-white/[0.03] py-1 pl-1 pr-3.5">
+      <div className="relative h-9 w-9">
+        <svg viewBox="0 0 38 38" className="h-full w-full -rotate-90">
+          <circle cx="19" cy="19" r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="3" />
+          <motion.circle
+            cx="19" cy="19" r={r} fill="none" stroke="url(#streakGrad)" strokeWidth="3" strokeLinecap="round"
+            strokeDasharray={c}
+            initial={{ strokeDashoffset: c }}
+            animate={{ strokeDashoffset: c * (1 - pct) }}
+            transition={{ duration: 1.4, ease: 'easeOut', delay: 0.3 }}
+          />
+          <defs>
+            <linearGradient id="streakGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#f59e0b" /><stop offset="60%" stopColor="#ef4444" /><stop offset="100%" stopColor="#ec4899" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <motion.span
+          className="absolute inset-0 flex items-center justify-center text-sm"
+          animate={{ scale: [1, 1.12, 1] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          🔥
+        </motion.span>
+      </div>
+      <div>
+        <div className="font-mono text-sm font-bold leading-none text-primary">{days} days</div>
+        <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">streak</div>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div>
       <div className="mb-1.5 text-xs font-medium text-secondary">{label}</div>
@@ -203,7 +370,8 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
         value={value}
         onChange={e => onChange(e.target.value)}
         rows={2}
-        className="w-full resize-none rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted"
+        placeholder={placeholder}
+        className="w-full resize-none rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted/70"
       />
     </div>
   )

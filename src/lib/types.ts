@@ -7,7 +7,9 @@ export type EventCategory =
   | 'customer' | 'milestone' | 'learning' | 'blocker' | 'idea'
   | 'launch' | 'integration' | 'design' | 'content' | 'other'
 
-export type ContentPlatform = 'twitter' | 'linkedin' | 'newsletter' | 'changelog' | 'blog'
+export type ContentPlatform =
+  | 'twitter' | 'linkedin' | 'newsletter' | 'changelog' | 'blog'
+  | 'threads' | 'devto' | 'producthunt' | 'resume'
 export type Tone = 'founder' | 'technical' | 'storytelling'
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary'
 export type Mood = 'fire' | 'good' | 'meh' | 'tough' | 'burned_out'
@@ -66,6 +68,8 @@ export interface ChangelogEntry {
 export interface Profile {
   username: string
   displayName: string
+  avatar?: string      // emoji face for the builder
+  avatarHue?: number   // gradient hue for the avatar ring
   bio: string
   projectName: string
   projectTagline: string

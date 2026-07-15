@@ -98,8 +98,11 @@ export default function Shell() {
 
         <div className="border-t border-line p-3">
           <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/20 text-sm font-semibold text-accent">
-              {profile.displayName[0]}
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base"
+              style={{ background: `linear-gradient(135deg, hsl(${profile.avatarHue ?? 245} 70% 55% / 0.35), hsl(${(profile.avatarHue ?? 245) + 60} 70% 55% / 0.25))` }}
+            >
+              {profile.avatar ?? profile.displayName[0]}
             </div>
             {!collapsed && (
               <div className="min-w-0">

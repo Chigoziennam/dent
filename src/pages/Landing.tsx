@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, GitCommitHorizontal, Rocket, Sparkles, Brain, Trophy, ScrollText, Check } from 'lucide-react'
 import { Orbs, CountUp, Logo } from '../components/ui'
+import { Mascot } from '../components/Mascot'
 
 export default function Landing() {
   return (
@@ -16,13 +17,19 @@ export default function Landing() {
           <span className="font-bold tracking-tight">ShipLog</span>
           <span className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-muted">by Nalto</span>
         </div>
-        <Link to="/login" className="rounded-lg border border-line px-3.5 py-1.5 text-[13px] font-medium text-secondary transition-colors hover:border-line-hover hover:text-primary">
-          Sign in
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link to="/pricing" className="rounded-lg px-3.5 py-1.5 text-[13px] font-medium text-secondary transition-colors hover:text-primary">
+            Pricing
+          </Link>
+          <Link to="/login" className="rounded-lg border border-line px-3.5 py-1.5 text-[13px] font-medium text-secondary transition-colors hover:border-line-hover hover:text-primary">
+            Sign in
+          </Link>
+        </div>
       </nav>
 
       {/* Hero */}
       <section className="relative z-10 flex min-h-[82dvh] flex-col items-center justify-center px-5 text-center">
+        <div className="grid-bg pointer-events-none absolute inset-0" />
         <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.12 } } }}>
           <motion.h1
             variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut' } } }}
@@ -46,7 +53,7 @@ export default function Landing() {
             <motion.div whileTap={{ scale: 0.97 }}>
               <Link
                 to="/login"
-                className="flex items-center gap-2 rounded-xl bg-accent px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_0_32px_rgba(99,102,241,0.4)]"
+                className="sheen flex items-center gap-2 rounded-xl bg-accent px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_0_32px_rgba(99,102,241,0.4)]"
               >
                 Start Building <ArrowRight size={16} />
               </Link>
@@ -60,6 +67,7 @@ export default function Landing() {
 
       {/* Transformation animation */}
       <section id="how" className="relative z-10 mx-auto max-w-2xl px-5 py-20">
+        <div className="mb-6 flex justify-center"><Mascot size={96} /></div>
         <h2 className="text-center text-2xl font-bold tracking-tight md:text-3xl">One commit becomes everything.</h2>
         <p className="mt-2 text-center text-secondary">Watch your Tuesday afternoon turn into Friday's content.</p>
         <TransformationLoop />

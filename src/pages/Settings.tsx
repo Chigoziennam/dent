@@ -24,6 +24,36 @@ export default function Settings() {
   return (
     <Page className="max-w-2xl">
       <GlassCard>
+        <SectionTitle>Your builder avatar</SectionTitle>
+        <div className="flex flex-wrap items-center gap-4">
+          <div
+            className="flex h-16 w-16 items-center justify-center rounded-2xl text-3xl"
+            style={{ background: `linear-gradient(135deg, hsl(${form.avatarHue ?? 245} 70% 55% / 0.35), hsl(${(form.avatarHue ?? 245) + 60} 70% 55% / 0.25))`, border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            {form.avatar ?? '🧑‍💻'}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap gap-1.5">
+              {AVATARS.map(a => (
+                <button key={a} onClick={() => setForm({ ...form, avatar: a })}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl border text-xl transition-all ${form.avatar === a ? 'border-accent bg-accent/20 scale-110' : 'border-line opacity-70 hover:opacity-100'}`}>
+                  {a}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex gap-1.5">
+              {HUES.map(h => (
+                <button key={h} onClick={() => setForm({ ...form, avatarHue: h })}
+                  aria-label={`hue ${h}`}
+                  className={`h-6 w-6 rounded-full border-2 transition-transform ${form.avatarHue === h ? 'scale-125 border-white/80' : 'border-transparent'}`}
+                  style={{ background: `linear-gradient(135deg, hsl(${h} 70% 55%), hsl(${h + 60} 70% 55%))` }} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard className="mt-4">
         <div className="flex items-center justify-between">
           <SectionTitle>Profile</SectionTitle>
           <Link to={`/${profile.username}`} className="flex items-center gap-1 text-xs text-accent hover:underline">
@@ -75,6 +105,9 @@ export default function Settings() {
     </Page>
   )
 }
+
+const AVATARS = ['🧑‍💻', '👩‍💻', '🦉', '🦜', '🚀', '⚡', '🔨', '🧠', '🐺', '🦅', '🌙', '☀️']
+const HUES = [245, 200, 160, 30, 330, 275]
 
 function Input({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (

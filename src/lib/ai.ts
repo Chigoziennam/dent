@@ -96,9 +96,86 @@ function template(p: GenParams): string {
     case 'changelog': {
       return `### ${p.projectName} — Weekly Changelog\n\n${top.map(e => `- **${CATEGORY_META[e.category].label}:** ${e.title}`).join('\n')}\n\n*${p.events.length} total changes this week.*`
     }
+    case 'threads':
+      return `A week ago this didn't exist.\n\nNow ${p.projectName} has:\n${bullets.join('\n')}\n\nBuilding in public, one ship at a time.`
+    case 'devto':
+      return `## ${p.projectName}: this week's build log\n\n${bullets.map(b => b.replace('→ ', '- ')).join('\n')}\n\n${counts.commit ?? 0} commits, ${counts.deployment ?? 0} deploys. ${learned ? `Biggest lesson: ${learned}` : ''}`
+    case 'producthunt':
+      return `${p.projectName} — what shipped this week:\n\n${bullets.join('\n')}\n\nShipping in public. Feedback welcome.`
+    case 'resume':
+      return top.map(e => `• ${e.title.replace(/^(feat|fix|chore|refactor|perf): /, '').replace(/^./, c => c.toUpperCase())} — ${p.projectName}`).join('\n')
     case 'blog': {
       return `# Building ${p.projectName}: a week in the log\n\n${p.projectTagline}\n\nThis week produced ${p.events.length} logged events. The highlights:\n\n${bullets.map(b => b.replace('→ ', '- ')).join('\n')}\n\n${learned ? `## What I learned\n\n${learned}\n\n` : ''}## Why I log everything\n\nBy Friday I used to forget what Monday looked like. Now every commit, deploy and customer conversation lands in one timeline — and content like this post writes itself from the raw material.`
     }
+  }
+}
+
+// ── The Humanizer ─────────────────────────────────────────────
+// Takes raw builder notes and reshapes them into a post that reads
+// like a person, not a press release: short sentences, concrete
+// details kept, filler stripped, no AI-sounding openers.
+export async function humanize(raw: string, platform: ContentPlatform, tone: Tone, projectName: string): Promise<string> {
+  if (API_KEY) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          system: SYSTEM_PROMPT + `\n\nExtra rules for humanizing:
+- The user gives you raw, messy notes. Keep their facts and voice, tighten everything else.
+- Short sentences. Concrete numbers. No hashtags unless they used them.
+- Never sound like AI: no "delve", no "exciting news", no bullet-point sandwiches unless the platform wants them.
+- It should read like the founder typed it on their phone after a good day.`,
+          messages: [{
+            role: 'user',
+            content: `Project: ${projectName}\nPlatform: ${platform}\nVoice: ${tone}\n\nMy raw notes:\n${raw}\n\nTurn this into a post. Keep it human.`,
+          }],
+        }),
+      })
+      const data = await res.json()
+      if (data?.content?.[0]?.text) return data.content[0].text
+    } catch { /* fall through */ }
+  }
+  await new Promise(r => setTimeout(r, 500))
+  return humanizeTemplate(raw, platform, tone, projectName)
+}
+
+function humanizeTemplate(raw: string, platform: ContentPlatform, tone: Tone, projectName: string): string {
+  // Split notes into clean fragments
+  const lines = raw
+    .split(/\n|(?<=[.!?])\s+/)
+    .map(l => l.replace(/^[-•*]\s*/, '').trim())
+    .filter(l => l.length > 2)
+  const points = lines.slice(0, 5)
+  const opener = {
+    founder: ['Quick update from the trenches.', 'Real talk from today\'s session:', 'Today\'s log, unfiltered:'],
+    technical: ['Notes from today\'s build:', 'What actually happened in the codebase today:', 'Today\'s engineering log:'],
+    storytelling: ['Today had a moment worth writing down.', 'Some days the work tells its own story. Today:', 'Here\'s how today actually went.'],
+  }[tone][raw.length % 3]
+
+  switch (platform) {
+    case 'twitter':
+    case 'threads':
+      return `${opener}\n\n${points.map(p => `${p}`).join('\n\n')}\n\nBack at it tomorrow. ${projectName} won't build itself.`
+    case 'linkedin':
+      return `${opener}\n\n${points.join('. ')}.\n\nNone of this is glamorous. That's the point — real progress rarely is. Building ${projectName} one honest day at a time.\n\nWhat did you ship this week?`
+    case 'devto':
+      return `## ${projectName}: today's build notes\n\n${points.map(p => `- ${p}`).join('\n')}\n\nWritten as it happened — no retrospective polish. If you're building something similar, the comments are open.`
+    case 'producthunt':
+      return `${projectName} — today's changelog for the curious:\n\n${points.map(p => `→ ${p}`).join('\n')}\n\nShipping in public, one day at a time. Feedback always welcome.`
+    case 'resume':
+      return points.map(p => `• ${p.charAt(0).toUpperCase() + p.slice(1).replace(/\.$/, '')} — delivered as part of ${projectName}`).join('\n')
+    case 'newsletter':
+      return `${opener}\n\n${points.map(p => `- ${p}`).join('\n')}\n\nThat's the honest version. See you in the next one.`
+    default:
+      return `${opener}\n\n${points.map(p => `- ${p}`).join('\n')}`
   }
 }
 

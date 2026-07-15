@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
+import Pricing from './pages/Pricing'
 import Shell from './components/Shell'
 import Today from './pages/Today'
 import Timeline from './pages/Timeline'
@@ -19,6 +20,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/pricing" element={<Pricing />} />
         <Route path="/app" element={<Shell />}>
           <Route index element={<Navigate to="/app/today" replace />} />
           <Route path="today" element={<Today />} />

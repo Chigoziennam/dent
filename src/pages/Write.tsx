@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { subDays, format } from 'date-fns'
@@ -42,6 +42,19 @@ export default function Write() {
   const [saved, setSaved] = useState(false)
   const [contextOpen, setContextOpen] = useState(false)
   const [proNudge, setProNudge] = useState(false)
+
+  // Accept a draft handed over from the Week page
+  useEffect(() => {
+    const raw = sessionStorage.getItem('shiplog-handoff')
+    if (!raw) return
+    sessionStorage.removeItem('shiplog-handoff')
+    try {
+      const h = JSON.parse(raw)
+      if (h.body) setBody(h.body)
+      if (h.platform) setPlatform(h.platform)
+      if (h.tone) setTone(h.tone)
+    } catch { /* ignore */ }
+  }, [])
 
   const cutoff = format(subDays(new Date(), range), 'yyyy-MM-dd')
   const rangeEvents = useMemo(() => events.filter(e => e.eventDate >= cutoff), [events, cutoff])

@@ -1,0 +1,43 @@
+{
+  "name": "ShipLog — GitHub Capture",
+  "nodes": [
+    {
+      "id": "wh1",
+      "name": "Webhook /shiplog-github",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "parameters": { "httpMethod": "POST", "path": "shiplog-github", "responseMode": "onReceived" }
+    },
+    {
+      "id": "code1",
+      "name": "Parse & categorize commits",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body ?? $input.first().json;\nconst out = [];\nfor (const c of b.commits ?? []) {\n  const msg = c.message.split('\\n')[0];\n  let category = 'commit';\n  if (/^feat/i.test(msg)) category = 'feature';\n  else if (/^fix/i.test(msg)) category = 'bugfix';\n  else if (/deploy/i.test(msg)) category = 'deployment';\n  out.push({ json: {\n    user_github: b.repository?.owner?.login ?? b.sender?.login,\n    source: 'github',\n    category,\n    title: msg,\n    metadata: JSON.stringify({ sha: c.id, url: c.url, repo: b.repository?.full_name }),\n    event_date: (c.timestamp ?? new Date().toISOString()).slice(0, 10),\n    event_time: c.timestamp ?? new Date().toISOString(),\n  }});\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "pg1",
+      "name": "Insert ship_event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [440, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO ship_events (user_id, source, category, title, metadata, event_date, event_time)\nSELECT p.id, $1::event_source, $2::event_category, $3, $4::jsonb, $5::date, $6::timestamptz\nFROM profiles p WHERE p.github_username = $7;",
+        "options": {
+          "queryReplacement": "={{ [$json.source, $json.category, $json.title, $json.metadata, $json.event_date, $json.event_time, $json.user_github] }}"
+        }
+      },
+      "credentials": { "postgres": { "name": "ShipLog Postgres" } }
+    }
+  ],
+  "connections": {
+    "Webhook /shiplog-github": { "main": [[{ "node": "Parse & categorize commits", "type": "main", "index": 0 }]] },
+    "Parse & categorize commits": { "main": [[{ "node": "Insert ship_event", "type": "main", "index": 0 }]] }
+  },
+  "settings": {}
+}

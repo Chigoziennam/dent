@@ -50,6 +50,26 @@ export function CountUp({ value, className = '', prefix = '', suffix = '' }: { v
   return <motion.span ref={ref} className={`font-mono tabular-nums ${className}`}>{rounded}</motion.span>
 }
 
+// Full deep-space scene: parallax starfields, nebula aurora,
+// shooting stars, a rolling synthwave grid and a planet rim.
+// Use on landing-class pages; Orbs stays as the lightweight variant.
+export function SpaceBackdrop({ withFloor = true }: { withFloor?: boolean }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+      <div className="aurora" />
+      <div className="star-layer star-layer-1" />
+      <div className="star-layer star-layer-2" />
+      <div className="star-layer star-layer-3" />
+      <span className="shooting-star" style={{ top: '12%', right: '-10%', animationDelay: '1s' }} />
+      <span className="shooting-star" style={{ top: '30%', right: '-16%', animationDelay: '5.5s', animationDuration: '11s' }} />
+      {withFloor && <>
+        <div className="planet" />
+        <div className="grid-floor" />
+      </>}
+    </div>
+  )
+}
+
 // Living backdrop: drifting aurora + twinkling stars.
 // Deterministic star placement so it never shifts between renders.
 export function Orbs() {

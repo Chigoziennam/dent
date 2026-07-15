@@ -1,0 +1,78 @@
+{
+  "name": "ShipLog — Payment Confirmer (Paystack)",
+  "nodes": [
+    {
+      "id": "wh1",
+      "name": "Webhook /shiplog-paystack",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "parameters": { "httpMethod": "POST", "path": "shiplog-paystack", "responseMode": "onReceived" }
+    },
+    {
+      "id": "http1",
+      "name": "Verify with Paystack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.paystack.co/transaction/verify/{{ $json.body.data.reference }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.PAYSTACK_SECRET_KEY }}" }]
+        }
+      }
+    },
+    {
+      "id": "if1",
+      "name": "Payment success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [{
+            "leftValue": "={{ $json.data.status }}",
+            "rightValue": "success",
+            "operator": { "type": "string", "operation": "equals" }
+          }]
+        }
+      }
+    },
+    {
+      "id": "pg1",
+      "name": "Upgrade tier + log revenue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [660, -80],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH u AS (\n  UPDATE profiles SET tier = CASE WHEN $2::int >= 1900 THEN 'team' ELSE 'pro' END::subscription_tier\n  WHERE lower(profiles.id::text) = lower($1) OR profiles.id IN (SELECT id FROM profiles WHERE username = $1)\n  RETURNING id\n)\nINSERT INTO ship_events (user_id, source, category, title, importance, event_date)\nSELECT id, 'stripe'::event_source, 'revenue'::event_category, 'Subscription payment confirmed — ' || ($2::numeric / 100)::text || ' ' || $3, 9, current_date FROM u;",
+        "options": { "queryReplacement": "={{ [$json.data.metadata?.user_id ?? $json.data.customer.email, $json.data.amount, $json.data.currency] }}" }
+      },
+      "credentials": { "postgres": { "name": "ShipLog Postgres" } }
+    },
+    {
+      "id": "code1",
+      "name": "Log failed payment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 100],
+      "parameters": { "jsCode": "console.log('Payment not successful:', $json.data?.reference); return $input.all();" }
+    }
+  ],
+  "connections": {
+    "Webhook /shiplog-paystack": { "main": [[{ "node": "Verify with Paystack", "type": "main", "index": 0 }]] },
+    "Verify with Paystack": { "main": [[{ "node": "Payment success?", "type": "main", "index": 0 }]] },
+    "Payment success?": {
+      "main": [
+        [{ "node": "Upgrade tier + log revenue", "type": "main", "index": 0 }],
+        [{ "node": "Log failed payment", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {}
+}

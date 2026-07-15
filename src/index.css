@@ -124,6 +124,107 @@ body {
 }
 :root[data-theme='light'] .star { background: #6366f1; }
 
+/* ── DEEP SPACE ─────────────────────────────────────────────── */
+/* Parallax star layers: each layer is a repeating box-shadow field
+   drifting at a different speed — depth without a single image. */
+@keyframes drift-slow { from { transform: translateY(0); } to { transform: translateY(-33.33%); } }
+.star-layer {
+  position: absolute;
+  inset: 0;
+  height: 300%;
+  background-repeat: repeat;
+  animation: drift-slow linear infinite;
+}
+.star-layer-1 {
+  background-image: radial-gradient(1px 1px at 20px 30px, rgba(255,255,255,0.8), transparent),
+    radial-gradient(1px 1px at 110px 90px, rgba(255,255,255,0.5), transparent),
+    radial-gradient(1.5px 1.5px at 60px 150px, rgba(165,180,252,0.7), transparent),
+    radial-gradient(1px 1px at 170px 50px, rgba(255,255,255,0.4), transparent);
+  background-size: 200px 200px;
+  animation-duration: 180s;
+}
+.star-layer-2 {
+  background-image: radial-gradient(1.5px 1.5px at 40px 60px, rgba(255,255,255,0.9), transparent),
+    radial-gradient(2px 2px at 150px 130px, rgba(236,72,153,0.6), transparent),
+    radial-gradient(1px 1px at 90px 20px, rgba(255,255,255,0.6), transparent);
+  background-size: 260px 260px;
+  animation-duration: 110s;
+}
+.star-layer-3 {
+  background-image: radial-gradient(2px 2px at 70px 100px, rgba(255,255,255,1), transparent),
+    radial-gradient(2.5px 2.5px at 200px 40px, rgba(103,232,249,0.8), transparent);
+  background-size: 340px 340px;
+  animation-duration: 70s;
+}
+
+/* Shooting star: a streak that fires across, rests, repeats */
+@keyframes shoot {
+  0% { transform: translate(0, 0) rotate(-35deg); opacity: 0; }
+  3% { opacity: 1; }
+  12% { transform: translate(-60vw, 42vw) rotate(-35deg); opacity: 0; }
+  100% { transform: translate(-60vw, 42vw) rotate(-35deg); opacity: 0; }
+}
+.shooting-star {
+  position: absolute;
+  width: 140px; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent);
+  border-radius: 9999px;
+  animation: shoot 9s ease-in infinite;
+  filter: drop-shadow(0 0 6px rgba(165,180,252,0.9));
+}
+
+/* Synthwave grid floor: perspective plane rolling toward the horizon */
+@keyframes grid-roll { from { background-position-y: 0; } to { background-position-y: 44px; } }
+.grid-floor {
+  position: absolute;
+  inset-inline: -30%;
+  bottom: 0;
+  height: 42%;
+  background-image:
+    linear-gradient(rgba(99,102,241,0.35) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(99,102,241,0.25) 1.5px, transparent 1.5px);
+  background-size: 44px 44px;
+  transform: perspective(420px) rotateX(62deg);
+  transform-origin: top;
+  animation: grid-roll 2.2s linear infinite;
+  mask-image: linear-gradient(to bottom, transparent, black 25%, black 70%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 25%, black 70%, transparent);
+}
+
+/* Planet rim rising behind the horizon */
+.planet {
+  position: absolute;
+  bottom: -38vw;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90vw; max-width: 1100px;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 50% 28%, #1a1a3e 0%, #0d0d20 45%, #07070f 70%);
+  box-shadow:
+    0 -2px 40px rgba(99,102,241,0.55),
+    0 -12px 120px rgba(139,92,246,0.35),
+    inset 0 6px 60px rgba(165,180,252,0.25);
+}
+:root[data-theme='light'] .star-layer-1,
+:root[data-theme='light'] .star-layer-2,
+:root[data-theme='light'] .star-layer-3,
+:root[data-theme='light'] .shooting-star { opacity: 0.25; }
+:root[data-theme='light'] .planet {
+  background: radial-gradient(circle at 50% 28%, #e6e6f5 0%, #d5d5ea 45%, #c8c8e0 70%);
+  box-shadow: 0 -2px 40px rgba(99,102,241,0.35), inset 0 6px 60px rgba(99,102,241,0.15);
+}
+
+/* Bento noise texture — the awesome-web-design touch */
+.noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 /* Glass panel recipe */
 .glass {
   background: rgba(255, 255, 255, 0.03);

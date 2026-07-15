@@ -147,6 +147,10 @@ const TECH_AVATARS = [
   db('croodles', 'doodle'), db('croodles', 'sketch'), db('fun-emoji', 'zap'), db('fun-emoji', 'grin'),
   // space & minimal art
   db('micah', 'nova'), db('micah', 'orbit'), db('micah', 'cosmo'), db('micah', 'luna'),
+  // hero mode — original superhero-style builders
+  db('personas', 'titan'), db('personas', 'storm'), db('personas', 'blaze'), db('personas', 'phantom'),
+  db('lorelei', 'nebula'), db('lorelei', 'comet'), db('lorelei', 'quasar'), db('lorelei', 'pulsar'),
+  db('avataaars', 'ironclad'), db('avataaars', 'sentinel'), db('avataaars', 'vortex'), db('avataaars', 'zenith'),
   // robots & pixels
   db('bottts', 'mainframe'), db('bottts', 'compiler'), db('bottts', 'daemon'), db('bottts', 'cron'),
   db('bottts', 'astro'), db('bottts', 'rocket'),

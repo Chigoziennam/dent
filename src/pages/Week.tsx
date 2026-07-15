@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, startOfWeek, addDays, parseISO } from 'date-fns'
 import { Copy, RefreshCw, Send, Check, ExternalLink, Trophy } from 'lucide-react'
@@ -83,6 +84,13 @@ export default function Week() {
     await navigator.clipboard.writeText(draft)
     const { url } = composeUrl(tab, draft)
     if (url) window.open(url, '_blank', 'noopener')
+  }
+
+  const navigate = useNavigate()
+  // Hand the draft to the full Writer for deeper editing
+  const openInWriter = () => {
+    if (draft) sessionStorage.setItem('shiplog-handoff', JSON.stringify({ body: draft, platform: tab, tone }))
+    navigate('/app/write')
   }
 
   return (
@@ -232,6 +240,7 @@ export default function Week() {
             <ActionBtn onClick={copy} icon={copied ? Check : Copy} label={copied ? 'Copied' : 'Copy'} disabled={!draft} />
             {composeUrl(tab, draft ?? '').url && <ActionBtn onClick={copyAndOpen} icon={ExternalLink} label="Copy & open" disabled={!draft} />}
             <ActionBtn onClick={saveDraft} icon={Send} label="Save Draft" disabled={!draft} />
+            <ActionBtn onClick={openInWriter} icon={Send} label="Open in Writer" disabled={!draft} />
             <ActionBtn onClick={publish} icon={Send} label="Publish to Changelog" disabled={!draft} />
           </div>
         </GlassCard>

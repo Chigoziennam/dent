@@ -7,6 +7,25 @@ import { CATEGORY_META } from './types'
 //     TODO(production): route through a Supabase Edge Function, never ship the key client-side.
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined
+const N8N_BASE = (import.meta.env.VITE_N8N_WEBHOOK_BASE as string | undefined)?.replace(/\/$/, '')
+
+// Alive mode: route through your own n8n instance, which holds the real
+// Anthropic key server-side and can log usage. One webhook, every feature.
+async function callN8n(task: string, payload: Record<string, unknown>): Promise<string | null> {
+  if (!N8N_BASE) return null
+  try {
+    const res = await fetch(`${N8N_BASE}/shiplog-ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task, ...payload }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return typeof data?.text === 'string' ? data.text : null
+  } catch {
+    return null
+  }
+}
 
 const SYSTEM_PROMPT = `You are ShipLog AI, an assistant for founders who build in public.
 Rules:
@@ -27,6 +46,12 @@ interface GenParams {
 }
 
 export async function generateContent(p: GenParams): Promise<string> {
+  const alive = await callN8n('generate', {
+    platform: p.platform, tone: p.tone, projectName: p.projectName, projectTagline: p.projectTagline,
+    events: p.events.map(e => ({ category: e.category, title: e.title, date: e.eventDate })),
+    dailyLogs: p.dailyLogs.map(l => ({ date: l.logDate, built: l.whatIBuilt, learned: l.whatILearned })),
+  })
+  if (alive) return alive
   if (API_KEY) {
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -124,6 +149,8 @@ function template(p: GenParams): string {
 // like a person, not a press release: short sentences, concrete
 // details kept, filler stripped, no AI-sounding openers.
 export async function humanize(raw: string, platform: ContentPlatform, tone: Tone, projectName: string): Promise<string> {
+  const alive = await callN8n('humanize', { raw, platform, tone, projectName })
+  if (alive) return alive
   if (API_KEY) {
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -203,6 +230,11 @@ export async function fuse(params: {
   projectName: string
 }): Promise<string> {
   const { picked, state, platform, tone, projectName } = params
+  const alive = await callN8n('fuse', {
+    state, platform, tone, projectName,
+    picked: picked.map(e => ({ category: e.category, title: e.title, date: e.eventDate })),
+  })
+  if (alive) return alive
   if (API_KEY) {
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {

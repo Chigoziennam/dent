@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, GitCommitHorizontal, Rocket, Sparkles, Brain, Trophy, ScrollText, Check } from 'lucide-react'
-import { Orbs, CountUp, Logo } from '../components/ui'
+import { Orbs, SpaceBackdrop, CountUp, Logo } from '../components/ui'
 import { Mascot } from '../components/Mascot'
 
 export default function Landing() {
@@ -28,8 +28,8 @@ export default function Landing() {
       </nav>
 
       {/* Hero */}
-      <section className="relative z-10 flex min-h-[82dvh] flex-col items-center justify-center px-5 text-center">
-        <div className="grid-bg pointer-events-none absolute inset-0" />
+      <section className="relative z-10 flex min-h-[88dvh] flex-col items-center justify-center px-5 text-center">
+        <SpaceBackdrop />
         <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.12 } } }}>
           <motion.h1
             variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut' } } }}
@@ -48,18 +48,18 @@ export default function Landing() {
           </motion.p>
           <motion.div
             variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut' } } }}
-            className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"
+            className="mt-8 flex flex-col items-center gap-3"
           >
             <motion.div whileTap={{ scale: 0.97 }}>
               <Link
                 to="/login"
-                className="sheen flex items-center gap-2 rounded-xl bg-accent px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_0_32px_rgba(99,102,241,0.4)]"
+                className="sheen flex items-center gap-2 rounded-xl bg-accent px-8 py-4 text-[15px] font-semibold text-white shadow-[0_0_40px_rgba(99,102,241,0.5)]"
               >
-                Start Building <ArrowRight size={16} />
+                Track me while I build <ArrowRight size={16} />
               </Link>
             </motion.div>
-            <a href="#how" className="flex items-center gap-2 rounded-xl border border-line px-6 py-3.5 text-[15px] font-medium text-secondary transition-colors hover:border-line-hover hover:text-primary">
-              See how it works
+            <a href="#how" className="text-[13px] text-muted transition-colors hover:text-secondary">
+              or see how it works ↓
             </a>
           </motion.div>
           <motion.div
@@ -77,6 +77,56 @@ export default function Landing() {
         <h2 className="text-center text-2xl font-bold tracking-tight md:text-3xl">One commit becomes everything.</h2>
         <p className="mt-2 text-center text-secondary">Watch your Tuesday afternoon turn into Friday's content.</p>
         <TransformationLoop />
+      </section>
+
+      {/* Proof-of-work profile showcase */}
+      <section className="relative z-10 mx-auto max-w-5xl px-5 py-20">
+        <div className="grid items-center gap-10 md:grid-cols-2">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight md:text-4xl">Your work, on display.<br /><span className="text-gradient">Forever.</span></h2>
+            <p className="mt-4 max-w-md leading-relaxed text-secondary">
+              Every builder gets a public proof-of-work page. Your streak, your ships, your badges —
+              a living portfolio that updates itself while you sleep. Send one link to an investor,
+              a client, or your future co-founder.
+            </p>
+            <Link to="/login" className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline">
+              Claim your page <ArrowRight size={14} />
+            </Link>
+          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 30, rotate: 1.5 }}
+            whileInView={{ opacity: 1, y: 0, rotate: 0 }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ type: 'spring', stiffness: 120, damping: 18 }}
+            className="glass noise relative !rounded-3xl p-6"
+            style={{ boxShadow: '0 0 60px rgba(99,102,241,0.15), 0 24px 64px rgba(0,0,0,0.5)' }}
+          >
+            <div className="flex items-center gap-3.5">
+              <img src="/avatars/notionists-kernel.svg" alt="" className="h-14 w-14 rounded-2xl border border-line" />
+              <div>
+                <div className="font-bold">Chigozie</div>
+                <div className="text-xs text-muted">@chigozie · building ShipLog</div>
+              </div>
+              <div className="streak-gradient ml-auto rounded-full px-3 py-1 text-xs font-bold text-white">🔥 21</div>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+              {[['226', 'ships'], ['Lv 6', 'Shipper'], ['12', 'badges']].map(([v, l]) => (
+                <div key={l} className="rounded-xl border border-line bg-white/[0.02] py-2.5">
+                  <div className="font-mono text-sm font-bold text-primary">{v}</div>
+                  <div className="text-[10px] text-muted">{l}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 space-y-1.5">
+              {['feat: add Stripe checkout flow', 'Deployed fee portal v0.3', 'First school signed LOI 🎉'].map(t => (
+                <div key={t} className="flex items-center gap-2 rounded-lg border border-line bg-white/[0.02] px-3 py-2 text-xs text-secondary">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" /> {t}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 text-center font-mono text-[10px] text-muted">shiplog.dev/chigozie</div>
+          </motion.div>
+        </div>
       </section>
 
       {/* Features */}
@@ -157,8 +207,8 @@ export default function Landing() {
           Your work deserves to be seen.
         </motion.h2>
         <motion.div whileTap={{ scale: 0.97 }} className="mt-8 inline-block">
-          <Link to="/login" className="flex items-center gap-2 rounded-xl bg-accent px-8 py-4 text-base font-semibold text-white shadow-[0_0_40px_rgba(99,102,241,0.45)]">
-            Start Building <ArrowRight size={18} />
+          <Link to="/login" className="sheen flex items-center gap-2 rounded-xl bg-accent px-8 py-4 text-base font-semibold text-white shadow-[0_0_40px_rgba(99,102,241,0.45)]">
+            Track me while I build <ArrowRight size={18} />
           </Link>
         </motion.div>
       </section>

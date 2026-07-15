@@ -24,24 +24,44 @@ export default function Settings() {
   return (
     <Page className="max-w-2xl">
       <GlassCard>
-        <SectionTitle>Your builder avatar</SectionTitle>
-        <div className="flex flex-wrap items-center gap-4">
-          <div
-            className="flex h-16 w-16 items-center justify-center rounded-2xl text-3xl"
-            style={{ background: `linear-gradient(135deg, hsl(${form.avatarHue ?? 245} 70% 55% / 0.35), hsl(${(form.avatarHue ?? 245) + 60} 70% 55% / 0.25))`, border: '1px solid rgba(255,255,255,0.1)' }}
-          >
-            {form.avatar ?? '🧑‍💻'}
+        <SectionTitle>Your builder identity</SectionTitle>
+        <div className="flex flex-wrap items-start gap-5">
+          {/* Current avatar preview */}
+          <div className="flex flex-col items-center gap-2">
+            <div
+              className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl text-4xl"
+              style={{ background: `linear-gradient(135deg, hsl(${form.avatarHue ?? 245} 70% 55% / 0.35), hsl(${(form.avatarHue ?? 245) + 60} 70% 55% / 0.25))`, border: '1px solid rgba(255,255,255,0.12)' }}
+            >
+              {form.avatarUrl
+                ? <img src={form.avatarUrl} alt="Your avatar" className="h-full w-full object-cover" />
+                : (form.avatar ?? '🧑‍💻')}
+            </div>
+            <span className="text-[10px] text-muted">you, currently</span>
           </div>
+
           <div className="min-w-0 flex-1">
+            <div className="mb-1.5 text-xs font-medium text-secondary">Tech avatars</div>
+            <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
+              {TECH_AVATARS.map(url => (
+                <button key={url} onClick={() => setForm({ ...form, avatarUrl: url })}
+                  className={`overflow-hidden rounded-xl border transition-all ${form.avatarUrl === url ? 'scale-110 border-accent shadow-[0_0_16px_rgba(99,102,241,0.4)]' : 'border-line opacity-75 hover:scale-105 hover:opacity-100'}`}>
+                  <img src={url} alt="avatar option" loading="lazy" className="aspect-square w-full bg-white/[0.03] object-cover" />
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3.5 mb-1.5 text-xs font-medium text-secondary">Or keep it minimal</div>
             <div className="flex flex-wrap gap-1.5">
               {AVATARS.map(a => (
-                <button key={a} onClick={() => setForm({ ...form, avatar: a })}
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl border text-xl transition-all ${form.avatar === a ? 'border-accent bg-accent/20 scale-110' : 'border-line opacity-70 hover:opacity-100'}`}>
+                <button key={a} onClick={() => setForm({ ...form, avatar: a, avatarUrl: undefined })}
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl border text-lg transition-all ${!form.avatarUrl && form.avatar === a ? 'border-accent bg-accent/20 scale-110' : 'border-line opacity-70 hover:opacity-100'}`}>
                   {a}
                 </button>
               ))}
             </div>
-            <div className="mt-3 flex gap-1.5">
+
+            <div className="mt-3.5 mb-1.5 text-xs font-medium text-secondary">Ring color</div>
+            <div className="flex gap-1.5">
               {HUES.map(h => (
                 <button key={h} onClick={() => setForm({ ...form, avatarHue: h })}
                   aria-label={`hue ${h}`}
@@ -108,6 +128,16 @@ export default function Settings() {
 
 const AVATARS = ['🧑‍💻', '👩‍💻', '🦉', '🦜', '🚀', '⚡', '🔨', '🧠', '🐺', '🦅', '🌙', '☀️']
 const HUES = [245, 200, 160, 30, 330, 275]
+
+// Real avatar art (DiceBear styles, self-hosted in /public/avatars) —
+// portraits, robots and pixel builders that actually look like a profile pic
+const db = (style: string, seed: string) => `/avatars/${style}-${seed}.svg`
+const TECH_AVATARS = [
+  db('notionists', 'kernel'), db('notionists', 'segfault'), db('notionists', 'lambda'), db('notionists', 'vector'),
+  db('adventurer', 'turing'), db('adventurer', 'ada'), db('adventurer', 'hopper'), db('adventurer', 'linus'),
+  db('bottts', 'mainframe'), db('bottts', 'compiler'), db('bottts', 'daemon'), db('bottts', 'cron'),
+  db('pixel-art', 'shipit'), db('pixel-art', 'debug'), db('pixel-art', 'deploy'), db('pixel-art', 'merge'),
+]
 
 function Input({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (

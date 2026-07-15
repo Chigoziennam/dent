@@ -18,6 +18,15 @@ const MOODS: { key: Mood; label: string; emoji: string }[] = [
   { key: 'burned_out', label: 'On fumes', emoji: '🪫' },
 ]
 
+// The energy tank: not a random 1–5, each level means something
+const TANK = [
+  { n: 1, label: 'Empty', desc: 'Ran on fumes. Tomorrow starts slow, and that’s fine.', color: '#ef4444' },
+  { n: 2, label: 'Low', desc: 'A grind of a day. Protect tomorrow morning.', color: '#f59e0b' },
+  { n: 3, label: 'Half', desc: 'Steady, sustainable pace. This is the marathon setting.', color: '#eab308' },
+  { n: 4, label: 'Charged', desc: 'Momentum day. Ride it into tomorrow’s first task.', color: '#22c55e' },
+  { n: 5, label: 'Full send', desc: 'Could have gone all night. Bottle this feeling.', color: '#10b981' },
+]
+
 // Rotating prompts so the logbook never feels like a form
 const PROMPTS = [
   {
@@ -246,16 +255,27 @@ export default function Today() {
                 <Field label={prompts.built} value={built} onChange={setBuilt} placeholder="Even 'fixed one CSS bug' counts. Small ships stack." />
                 <Field label={prompts.blocked} value={blocked} onChange={setBlocked} placeholder="Name the wall. Tomorrow it's smaller." />
                 <Field label={prompts.learned} value={learned} onChange={setLearned} placeholder="The lesson you'd want back in a month." />
-                <div className="flex flex-wrap items-center gap-6">
+                <div className="flex flex-col gap-5">
                   <div>
-                    <div className="mb-1.5 text-xs font-medium text-secondary">Tank level</div>
+                    <div className="mb-0.5 text-xs font-medium text-secondary">Energy tank</div>
+                    <div className="mb-2 text-[11px] text-muted">How much fuel was left in you when you stopped? It shapes tomorrow's pace — and your analytics.</div>
                     <div className="flex gap-1.5">
-                      {[1, 2, 3, 4, 5].map(n => (
-                        <button key={n} onClick={() => setEnergy(n)}
-                          className={`h-9 w-9 rounded-lg border text-sm font-semibold transition-all ${energy === n ? 'border-accent bg-accent/20 text-accent' : 'border-line text-muted hover:border-line-hover'}`}>
-                          {n}
+                      {TANK.map(t => (
+                        <button
+                          key={t.n}
+                          onClick={() => setEnergy(t.n)}
+                          className="group flex-1 text-left"
+                        >
+                          <div
+                            className={`h-8 rounded-lg border transition-all ${energy >= t.n ? 'border-transparent' : 'border-line bg-white/[0.02] group-hover:border-line-hover'}`}
+                            style={energy >= t.n ? { background: `linear-gradient(135deg, ${TANK[energy - 1].color}cc, ${TANK[energy - 1].color}66)`, boxShadow: `0 0 14px ${TANK[energy - 1].color}44` } : undefined}
+                          />
+                          <div className={`mt-1 text-center text-[9.5px] font-medium uppercase tracking-wide ${energy === t.n ? 'text-primary' : 'text-muted'}`}>{t.label}</div>
                         </button>
                       ))}
+                    </div>
+                    <div className="mt-1.5 text-center text-[11px] text-secondary">
+                      <span className="font-semibold" style={{ color: TANK[energy - 1].color }}>{TANK[energy - 1].label}</span> — {TANK[energy - 1].desc}
                     </div>
                   </div>
                   <div>

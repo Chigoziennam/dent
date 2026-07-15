@@ -2,9 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { subDays, format } from 'date-fns'
-import { Sparkles, Copy, Save, Check, ChevronDown, Wand2, Lock } from 'lucide-react'
+import { Sparkles, Copy, Save, Check, ChevronDown, Wand2, Lock, Atom, ExternalLink } from 'lucide-react'
 import { useShipLog } from '../lib/store'
-import { generateContent, humanize } from '../lib/ai'
+import { generateContent, humanize, fuse, composeUrl } from '../lib/ai'
 import type { ContentPlatform, Tone } from '../lib/types'
 import { Page, CategoryPill, SectionTitle } from '../components/ui'
 
@@ -28,7 +28,10 @@ const RANGES = [
 
 export default function Write() {
   const { events, dailyLogs, profile, saveContent, content } = useShipLog()
-  const [mode, setMode] = useState<'ships' | 'manual'>('ships')
+  const [mode, setMode] = useState<'ships' | 'manual' | 'fusion'>('ships')
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [state, setState] = useState('')
+  const [opened, setOpened] = useState(false)
   const [platform, setPlatform] = useState<ContentPlatform>('twitter')
   const [tone, setTone] = useState<Tone>(profile.tone)
   const [range, setRange] = useState(7)
@@ -56,12 +59,33 @@ export default function Write() {
     setGenerating(true)
     const text = mode === 'manual'
       ? await humanize(raw, platform, tone, profile.projectName)
-      : await generateContent({
-          events: rangeEvents, dailyLogs: rangeLogs, platform, tone,
-          projectName: profile.projectName, projectTagline: profile.projectTagline,
-        })
+      : mode === 'fusion'
+        ? await fuse({
+            picked: rangeEvents.filter(e => picked.has(e.id)),
+            state, platform, tone, projectName: profile.projectName,
+          })
+        : await generateContent({
+            events: rangeEvents, dailyLogs: rangeLogs, platform, tone,
+            projectName: profile.projectName, projectTagline: profile.projectTagline,
+          })
     setBody(text)
     setGenerating(false)
+  }
+
+  const togglePick = (id: string) => {
+    setPicked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  // Copy the post, then jump straight into the platform's composer
+  const copyAndOpen = async () => {
+    await navigator.clipboard.writeText(body)
+    const { url } = composeUrl(platform, body)
+    if (url) window.open(url, '_blank', 'noopener')
+    setOpened(true); setTimeout(() => setOpened(false), 2500)
   }
 
   const copy = async () => {
@@ -81,7 +105,8 @@ export default function Write() {
       <div className="mb-4 flex rounded-2xl border border-line bg-white/[0.02] p-1">
         {([
           { key: 'ships', label: 'From my ships', hint: 'AI drafts from your logged events', icon: Sparkles },
-          { key: 'manual', label: 'Raw notes → Human post', hint: 'You talk, it shapes — never sounds like AI', icon: Wand2 },
+          { key: 'manual', label: 'Raw notes → Human', hint: 'You talk, it shapes — never sounds like AI', icon: Wand2 },
+          { key: 'fusion', label: 'Fusion', hint: 'Pick ships + your state = the ultimate post', icon: Atom },
         ] as const).map(m => (
           <button
             key={m.key}
@@ -116,6 +141,40 @@ export default function Write() {
                 ))}
                 {rangeEvents.length > 14 && <div className="pt-1 text-center font-mono text-[11px] text-muted">+ {rangeEvents.length - 14} more feeding the AI</div>}
               </div>
+            </div>
+          ) : mode === 'fusion' ? (
+            <div className="glass flex flex-col p-5">
+              <SectionTitle>Step 1 · Pick your ships</SectionTitle>
+              <p className="mb-2.5 text-xs leading-relaxed text-muted">
+                Tap the events that belong in this post — they become the facts.
+              </p>
+              <div className="no-scrollbar max-h-56 space-y-1.5 overflow-y-auto pr-1">
+                {rangeEvents.slice(0, 20).map(e => {
+                  const on = picked.has(e.id)
+                  return (
+                    <button key={e.id} onClick={() => togglePick(e.id)}
+                      className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all ${on ? 'border-accent/60 bg-accent/10' : 'border-line bg-white/[0.02] opacity-70 hover:opacity-100'}`}>
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] ${on ? 'border-accent bg-accent text-white' : 'border-line'}`}>
+                        {on && '✓'}
+                      </span>
+                      <CategoryPill category={e.category} />
+                      <span className="truncate text-xs text-secondary">{e.title}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="mt-1.5 text-right font-mono text-[10px] text-muted">{picked.size} selected</div>
+              <SectionTitle>Step 2 · Your current state</SectionTitle>
+              <p className="mb-2 text-xs leading-relaxed text-muted">
+                How does it actually feel right now? Tired, wired, proud, doubting — the fusion needs the human part.
+              </p>
+              <textarea
+                value={state}
+                onChange={e => setState(e.target.value)}
+                rows={4}
+                placeholder={`e.g. honestly exhausted but the demo went so well I can't sleep`}
+                className="resize-none rounded-xl border border-line bg-white/[0.02] p-3.5 text-sm leading-relaxed placeholder:text-muted/60"
+              />
             </div>
           ) : (
             <div className="glass flex flex-col p-5">
@@ -186,7 +245,7 @@ export default function Write() {
                 {t}
               </button>
             ))}
-            {mode === 'ships' && <>
+            {mode !== 'manual' && <>
               <div className="mx-1 h-4 w-px bg-line" />
               {RANGES.map(r => (
                 <button key={r.key} onClick={() => setRange(r.key)}
@@ -200,11 +259,11 @@ export default function Write() {
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={generate}
-            disabled={generating || (mode === 'manual' && !raw.trim())}
+            disabled={generating || (mode === 'manual' && !raw.trim()) || (mode === 'fusion' && picked.size === 0)}
             className="sheen mt-4 flex items-center justify-center gap-2 rounded-xl bg-accent py-3 text-sm font-semibold text-white shadow-[0_0_28px_rgba(99,102,241,0.35)] disabled:opacity-60"
           >
-            {mode === 'manual' ? <Wand2 size={15} className={generating ? 'animate-pulse' : ''} /> : <Sparkles size={15} className={generating ? 'animate-pulse' : ''} />}
-            {generating ? 'Writing…' : mode === 'manual' ? 'Make it human' : 'Generate ✨'}
+            {mode === 'manual' ? <Wand2 size={15} className={generating ? 'animate-pulse' : ''} /> : mode === 'fusion' ? <Atom size={15} className={generating ? 'animate-spin' : ''} /> : <Sparkles size={15} className={generating ? 'animate-pulse' : ''} />}
+            {generating ? 'Writing…' : mode === 'manual' ? 'Make it human' : mode === 'fusion' ? `Fuse ${picked.size ? `${picked.size} ${picked.size === 1 ? 'ship' : 'ships'}` : 'ships'} + my state` : 'Generate ✨'}
           </motion.button>
 
           <textarea
@@ -226,8 +285,20 @@ export default function Write() {
                 className="flex items-center gap-1.5 rounded-lg border border-line px-3.5 py-2 text-[13px] font-medium text-secondary hover:border-line-hover hover:text-primary disabled:opacity-40">
                 {saved ? <Check size={13} className="text-success" /> : <Save size={13} />} {saved ? 'Saved' : 'Save Draft'}
               </motion.button>
+              {composeUrl(platform, body).url && (
+                <motion.button whileTap={{ scale: 0.97 }} onClick={copyAndOpen} disabled={!body}
+                  className="flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-[13px] font-semibold text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] disabled:opacity-40">
+                  {opened ? <Check size={13} /> : <ExternalLink size={13} />}
+                  {opened ? 'Copied — paste & post' : 'Copy & open'}
+                </motion.button>
+              )}
             </div>
           </div>
+          {composeUrl(platform, body).url && (
+            <p className="mt-2 text-right text-[10px] text-muted">
+              Copy & open drops you into the {PLATFORMS.find(p => p.key === platform)?.label} composer, post already on your clipboard.
+            </p>
+          )}
         </div>
       </div>
     </Page>

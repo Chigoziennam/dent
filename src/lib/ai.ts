@@ -179,6 +179,80 @@ function humanizeTemplate(raw: string, platform: ContentPlatform, tone: Tone, pr
   }
 }
 
+// ── Fusion mode ───────────────────────────────────────────────
+// Merges hand-picked ship events with the builder's raw current
+// state into one draft: the facts from the log, the mood from the
+// human, fused into the ultimate message.
+export async function fuse(params: {
+  picked: ShipEvent[]
+  state: string
+  platform: ContentPlatform
+  tone: Tone
+  projectName: string
+}): Promise<string> {
+  const { picked, state, platform, tone, projectName } = params
+  if (API_KEY) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          system: SYSTEM_PROMPT,
+          messages: [{
+            role: 'user',
+            content: `Project: ${projectName}\nPlatform: ${platform}\nVoice: ${tone}\n\nShips I picked from my log:\n${picked.map(e => `- [${e.category}] ${e.title} (${e.eventDate})`).join('\n')}\n\nHow I actually feel right now, raw:\n${state}\n\nFuse both into one ${platform} post: my logged facts + my current state. It must read like me on a real day, not a highlight reel.`,
+          }],
+        }),
+      })
+      const data = await res.json()
+      if (data?.content?.[0]?.text) return data.content[0].text
+    } catch { /* fall through */ }
+  }
+  await new Promise(r => setTimeout(r, 600))
+  const bullets = picked.map(e => `→ ${e.title.replace(/^(feat|fix|chore|refactor|perf): /, '')}`)
+  const feeling = state.trim().split(/\n/)[0] ?? ''
+  const openers = {
+    founder: feeling ? `${feeling.replace(/\.$/, '')}. Here's what the log says I actually did:` : `The log doesn't lie. This period:`,
+    technical: `State of the build${feeling ? ` (${feeling.toLowerCase().replace(/\.$/, '')})` : ''}:`,
+    storytelling: feeling ? `${feeling.replace(/\.$/, '')} — and yet, the work moved:` : `Some weeks you only see the progress when you read it back:`,
+  }
+  const closers = {
+    founder: `That's ${projectName}, one honest day at a time.`,
+    technical: `${picked.length} entries from the log. Consistency is the architecture.`,
+    storytelling: `Future me will read this back and remember exactly how it felt.`,
+  }
+  switch (platform) {
+    case 'linkedin':
+      return `${openers[tone]}\n\n${bullets.join('\n')}\n\n${state.trim() ? `The honest part: ${state.trim()}\n\n` : ''}${closers[tone]}\n\nWhat did you ship this week?`
+    case 'newsletter':
+      return `## The log vs. how it felt\n\n${openers[tone]}\n\n${bullets.map(b => b.replace('→ ', '- ')).join('\n')}\n\n${state.trim() ? `Between the lines: ${state.trim()}\n\n` : ''}${closers[tone]}`
+    default:
+      return `${openers[tone]}\n\n${bullets.join('\n')}\n\n${closers[tone]}`
+  }
+}
+
+// ── Copy & open: paste-ready posting ─────────────────────────
+// Copies the post, then opens the platform's compose surface —
+// prefilled where the platform allows it, paste-ready everywhere else.
+export function composeUrl(platform: ContentPlatform, body: string): { url: string; prefills: boolean } {
+  const t = encodeURIComponent(body)
+  switch (platform) {
+    case 'twitter': return { url: `https://x.com/intent/post?text=${t}`, prefills: true }
+    case 'threads': return { url: `https://www.threads.net/intent/post?text=${t}`, prefills: true }
+    case 'linkedin': return { url: `https://www.linkedin.com/feed/?shareActive=true&text=${t}`, prefills: true }
+    case 'devto': return { url: 'https://dev.to/new', prefills: false }
+    case 'producthunt': return { url: 'https://www.producthunt.com/posts/new', prefills: false }
+    default: return { url: '', prefills: false }
+  }
+}
+
 function countBy(events: ShipEvent[]): Record<string, number> {
   const out: Record<string, number> = {}
   for (const e of events) out[e.category] = (out[e.category] ?? 0) + 1

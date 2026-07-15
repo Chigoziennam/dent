@@ -62,6 +62,12 @@ export default function Landing() {
               See how it works
             </a>
           </motion.div>
+          <motion.div
+            variants={{ hidden: { opacity: 0, y: 32 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut' } } }}
+            className="mx-auto mt-12 w-full max-w-xl"
+          >
+            <TerminalWindow />
+          </motion.div>
         </motion.div>
       </section>
 
@@ -109,6 +115,18 @@ export default function Landing() {
               {name}
             </motion.span>
           ))}
+        </div>
+      </section>
+
+      {/* Builders wall */}
+      <section className="relative z-10 py-16">
+        <h2 className="px-5 text-center text-2xl font-bold tracking-tight md:text-3xl">A home for people who ship.</h2>
+        <p className="mx-auto mt-2 max-w-md px-5 text-center text-secondary">
+          Solo founders, indie hackers, night-shift builders. The log is where their work stops disappearing.
+        </p>
+        <div className="mt-10 space-y-4 overflow-hidden" style={{ maskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)', WebkitMaskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)' }}>
+          <MarqueeRow builders={BUILDERS_A} dir="l" />
+          <MarqueeRow builders={BUILDERS_B} dir="r" />
         </div>
       </section>
 
@@ -163,6 +181,92 @@ const FEATURES = [
   { icon: Trophy, title: 'Achievements', desc: 'Level up with XP, badges, and shipping streaks that keep you moving.' },
   { icon: ScrollText, title: 'Public Changelog', desc: 'Auto-generated, beautifully designed, shareable proof of work.' },
 ]
+
+// ── Animated terminal: the product pitch in 6 lines ──────────────
+const TERM_LINES = [
+  { text: '$ git push origin main', color: '#f0f0f5' },
+  { text: '✓ 3 commits captured by ShipLog', color: '#22c55e' },
+  { text: '✓ vercel deploy detected — production', color: '#22c55e' },
+  { text: '✓ stripe: new customer event logged', color: '#22c55e' },
+  { text: '✨ Friday thread drafted from 34 ships', color: '#a5b4fc' },
+  { text: '→ you: just keep building', color: '#8888a0' },
+]
+
+function TerminalWindow() {
+  const [lineIdx, setLineIdx] = useState(0)
+  const [chars, setChars] = useState(0)
+
+  useEffect(() => {
+    const current = TERM_LINES[lineIdx]
+    if (!current) {
+      const t = setTimeout(() => { setLineIdx(0); setChars(0) }, 3200)
+      return () => clearTimeout(t)
+    }
+    if (chars < current.text.length) {
+      const t = setTimeout(() => setChars(c => c + 1), lineIdx === 0 ? 45 : 14)
+      return () => clearTimeout(t)
+    }
+    const t = setTimeout(() => { setLineIdx(i => i + 1); setChars(0) }, 520)
+    return () => clearTimeout(t)
+  }, [lineIdx, chars])
+
+  return (
+    <div className="glass overflow-hidden !rounded-2xl text-left">
+      <div className="flex items-center gap-1.5 border-b border-line px-4 py-3">
+        <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+        <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+        <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+        <span className="ml-3 font-mono text-[11px] text-muted">founder@shiplog ~ %</span>
+      </div>
+      <div className="min-h-[168px] p-4 font-mono text-[12.5px] leading-relaxed">
+        {TERM_LINES.slice(0, lineIdx).map(l => (
+          <div key={l.text} style={{ color: l.color }}>{l.text}</div>
+        ))}
+        {TERM_LINES[lineIdx] && (
+          <div className="caret" style={{ color: TERM_LINES[lineIdx].color }}>
+            {TERM_LINES[lineIdx].text.slice(0, chars)}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Builders wall: portraits of the people this is for ───────────
+const av = (style: string, seed: string) => `/avatars/${style}-${seed}.svg`
+const BUILDERS_A = [
+  { name: 'Amara', role: 'indie SaaS, Lagos', img: av('notionists', 'amara'), quote: 'I stopped dreading Fridays. The thread writes itself.' },
+  { name: 'Dev', role: 'solo founder, 2am shift', img: av('adventurer', 'dev'), quote: 'My streak is the only manager I answer to.' },
+  { name: 'Kofi', role: 'fintech builder', img: av('notionists', 'kofi'), quote: 'Investors read my changelog before our first call.' },
+  { name: 'Sara', role: 'design engineer', img: av('adventurer', 'sara'), quote: 'Six months of work I would have forgotten. Logged.' },
+  { name: 'Tunde', role: 'agency → product', img: av('notionists', 'tunde'), quote: 'The evening logbook became my favorite ritual.' },
+]
+const BUILDERS_B = [
+  { name: 'Lena', role: 'open-source maintainer', img: av('adventurer', 'lena'), quote: 'Release notes in my voice, not changelog-speak.' },
+  { name: 'Ravi', role: 'bootstrapped B2B', img: av('notionists', 'ravi'), quote: 'First customer came from a week-12 recap post.' },
+  { name: 'Maya', role: 'ML tinkerer', img: av('adventurer', 'maya'), quote: 'The pulse chart guilt-trips me better than any todo app.' },
+  { name: 'Chuka', role: 'mobile dev, nights', img: av('notionists', 'chuka'), quote: 'The owl gets me. Night ships still count.' },
+  { name: 'Ines', role: 'CEO in training', img: av('adventurer', 'ines'), quote: 'My resume is literally my ship log now.' },
+]
+
+function MarqueeRow({ builders, dir }: { builders: typeof BUILDERS_A; dir: 'l' | 'r' }) {
+  const doubled = [...builders, ...builders]
+  return (
+    <div className="flex overflow-hidden">
+      <div className={`flex shrink-0 gap-4 pr-4 ${dir === 'l' ? 'marquee-l' : 'marquee-r'}`}>
+        {doubled.map((b, i) => (
+          <div key={`${b.name}-${i}`} className="glass flex w-[300px] shrink-0 items-start gap-3 !rounded-2xl p-4">
+            <img src={b.img} alt="" loading="lazy" className="h-11 w-11 shrink-0 rounded-xl border border-line object-cover" />
+            <div className="min-w-0">
+              <p className="text-[13px] leading-snug text-primary">“{b.quote}”</p>
+              <p className="mt-1.5 text-[11px] text-muted">{b.name} · {b.role}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── The signature morphing card loop ─────────────────────────────
 const STAGES = [

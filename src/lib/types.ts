@@ -69,6 +69,7 @@ export interface Profile {
   username: string
   displayName: string
   avatar?: string      // emoji face for the builder
+  avatarUrl?: string   // real avatar image (tech portrait / robot / pixel)
   avatarHue?: number   // gradient hue for the avatar ring
   bio: string
   projectName: string

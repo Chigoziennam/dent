@@ -5,7 +5,7 @@ import { subDays, format } from 'date-fns'
 import { Sparkles, Copy, Save, Check, ChevronDown, Wand2, Lock, Atom, ExternalLink } from 'lucide-react'
 import { useShipLog } from '../lib/store'
 import { generateContent, humanize, fuse, composeUrl } from '../lib/ai'
-import type { ContentPlatform, Tone } from '../lib/types'
+import { TONE_META, type ContentPlatform, type Tone } from '../lib/types'
 import { Page, CategoryPill, SectionTitle } from '../components/ui'
 
 const PLATFORMS: { key: ContentPlatform; label: string; pro?: boolean }[] = [
@@ -19,7 +19,7 @@ const PLATFORMS: { key: ContentPlatform; label: string; pro?: boolean }[] = [
   { key: 'producthunt', label: 'Product Hunt', pro: true },
   { key: 'resume', label: 'Resume Builder', pro: true },
 ]
-const TONES: Tone[] = ['founder', 'technical', 'storytelling']
+const TONES = Object.keys(TONE_META) as Tone[]
 const RANGES = [
   { key: 7, label: 'This Week' },
   { key: 30, label: 'This Month' },
@@ -240,11 +240,12 @@ export default function Write() {
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             {TONES.map(t => (
-              <button key={t} onClick={() => setTone(t)}
-                className={`rounded-full border px-3 py-1 text-[11.5px] font-medium capitalize transition-colors ${tone === t ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted'}`}>
-                {t}
+              <button key={t} onClick={() => setTone(t)} title={TONE_META[t].hint}
+                className={`rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${tone === t ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted'}`}>
+                {TONE_META[t].label}
               </button>
             ))}
+            <span className="hidden text-[10.5px] italic text-muted lg:inline">{TONE_META[tone].hint}</span>
             {mode !== 'manual' && <>
               <div className="mx-1 h-4 w-px bg-line" />
               {RANGES.map(r => (

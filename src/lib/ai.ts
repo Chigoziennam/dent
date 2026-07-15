@@ -82,6 +82,15 @@ function template(p: GenParams): string {
       if (p.tone === 'storytelling') {
         return `A week ago this didn't exist.\n\nNow ${p.projectName} has:\n${bullets.join('\n')}\n\nBuilding in public, one ship at a time.`
       }
+      if (p.tone === 'hype') {
+        return `${p.projectName} IS COOKING 🔥\n\n${bullets.join('\n')}\n\n${counts.commit ?? 0} commits. ${counts.deployment ?? 0} deploys. Zero days off.\n\nWe are SO back.`
+      }
+      if (p.tone === 'mentor') {
+        return `A real week of building looks like this:\n\n${bullets.join('\n')}\n\nNot glamorous. Just consistent. ${learned ? `Biggest lesson: ${learned}` : 'Show up again tomorrow.'}`
+      }
+      if (p.tone === 'unfiltered') {
+        return `week recap, no polish:\n\n${bullets.join('\n')}\n\nsome of it fought back. shipped anyway.`
+      }
       return `This week I shipped:\n${bullets.join('\n')}\n\nBuilding ${p.projectName} in public. The streak continues. 🔥`
     }
     case 'linkedin': {
@@ -158,6 +167,9 @@ function humanizeTemplate(raw: string, platform: ContentPlatform, tone: Tone, pr
     founder: ['Quick update from the trenches.', 'Real talk from today\'s session:', 'Today\'s log, unfiltered:'],
     technical: ['Notes from today\'s build:', 'What actually happened in the codebase today:', 'Today\'s engineering log:'],
     storytelling: ['Today had a moment worth writing down.', 'Some days the work tells its own story. Today:', 'Here\'s how today actually went.'],
+    hype: ['LET\'S GO. Today delivered:', 'Big day in the workshop:', 'The momentum is REAL today:'],
+    mentor: ['A few things today taught me, sharing in case they help:', 'If you\'re earlier on this road, today\'s notes:', 'Lessons from today\'s session:'],
+    unfiltered: ['No polish, here\'s today:', 'The honest log, typos and all:', 'What today actually looked like:'],
   }[tone][raw.length % 3]
 
   switch (platform) {
@@ -222,11 +234,17 @@ export async function fuse(params: {
     founder: feeling ? `${feeling.replace(/\.$/, '')}. Here's what the log says I actually did:` : `The log doesn't lie. This period:`,
     technical: `State of the build${feeling ? ` (${feeling.toLowerCase().replace(/\.$/, '')})` : ''}:`,
     storytelling: feeling ? `${feeling.replace(/\.$/, '')} — and yet, the work moved:` : `Some weeks you only see the progress when you read it back:`,
+    hype: feeling ? `${feeling.replace(/\.$/, '')} — AND LOOK AT THIS LIST:` : `The scoreboard doesn't lie:`,
+    mentor: feeling ? `${feeling.replace(/\.$/, '')}. For anyone building alongside me, here's the week:` : `For anyone earlier on this path, here's what a real week looks like:`,
+    unfiltered: feeling ? `${feeling.replace(/\.$/, '')}. anyway, receipts:` : `no intro, just the receipts:`,
   }
   const closers = {
     founder: `That's ${projectName}, one honest day at a time.`,
     technical: `${picked.length} entries from the log. Consistency is the architecture.`,
     storytelling: `Future me will read this back and remember exactly how it felt.`,
+    hype: `${projectName} is not slowing down. Strap in. 🚀`,
+    mentor: `None of this needed genius — just showing up again. You can do the same.`,
+    unfiltered: `that's it. back to the terminal.`,
   }
   switch (platform) {
     case 'linkedin':

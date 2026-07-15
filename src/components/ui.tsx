@@ -50,21 +50,21 @@ export function CountUp({ value, className = '', prefix = '', suffix = '' }: { v
   return <motion.span ref={ref} className={`font-mono tabular-nums ${className}`}>{rounded}</motion.span>
 }
 
+// Living backdrop: drifting aurora + twinkling stars.
+// Deterministic star placement so it never shifts between renders.
 export function Orbs() {
+  const stars = Array.from({ length: 28 }, (_, i) => ({
+    left: `${(i * 37) % 100}%`,
+    top: `${(i * 53 + 11) % 100}%`,
+    delay: `${(i % 7) * 0.45}s`,
+    scale: 0.6 + ((i * 13) % 10) / 10,
+  }))
   return (
     <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
-      <motion.div
-        className="absolute h-[560px] w-[560px] rounded-full"
-        style={{ background: 'radial-gradient(circle, #6366f1, transparent 65%)', opacity: 0.08, top: '-10%', left: '-8%', filter: 'blur(60px)' }}
-        animate={{ x: [0, 120, -40, 0], y: [0, 80, 140, 0] }}
-        transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-      />
-      <motion.div
-        className="absolute h-[480px] w-[480px] rounded-full"
-        style={{ background: 'radial-gradient(circle, #ec4899, transparent 65%)', opacity: 0.08, bottom: '-12%', right: '-6%', filter: 'blur(60px)' }}
-        animate={{ x: [0, -100, 60, 0], y: [0, -120, -40, 0] }}
-        transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}
-      />
+      <div className="aurora" />
+      {stars.map((s, i) => (
+        <span key={i} className="star" style={{ left: s.left, top: s.top, animationDelay: s.delay, transform: `scale(${s.scale})` }} />
+      ))}
     </div>
   )
 }

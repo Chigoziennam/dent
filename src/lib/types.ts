@@ -10,7 +10,16 @@ export type EventCategory =
 export type ContentPlatform =
   | 'twitter' | 'linkedin' | 'newsletter' | 'changelog' | 'blog'
   | 'threads' | 'devto' | 'producthunt' | 'resume'
-export type Tone = 'founder' | 'technical' | 'storytelling'
+export type Tone = 'founder' | 'technical' | 'storytelling' | 'hype' | 'mentor' | 'unfiltered'
+
+export const TONE_META: Record<Tone, { label: string; hint: string }> = {
+  founder: { label: 'Founder', hint: 'confident, casual, first-person' },
+  technical: { label: 'Technical', hint: 'precise, architecture-first' },
+  storytelling: { label: 'Storyteller', hint: 'narrative arc, problem → win' },
+  hype: { label: 'Hype', hint: 'big energy, launch-day voice' },
+  mentor: { label: 'Mentor', hint: 'calm, lessons-first, generous' },
+  unfiltered: { label: 'Unfiltered', hint: 'raw, honest, 2am-commit energy' },
+}
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary'
 export type Mood = 'fire' | 'good' | 'meh' | 'tough' | 'burned_out'
 
@@ -78,6 +87,7 @@ export interface Profile {
   twitter: string
   github: string
   tone: Tone
+  theme?: 'dark' | 'light'
   streakCurrent: number
   streakLongest: number
   builderScore: number

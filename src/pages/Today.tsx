@@ -79,6 +79,27 @@ export default function Today() {
   const hoursSinceShip = lastShipTime ? Math.max(0, Math.round((Date.now() - lastShipTime) / 36e5)) : null
   const streakAtRisk = todaysEvents.length === 0 && hour >= 15
 
+  // The companion speaks once a day — specific, warm, never spammy.
+  // (Backend version: n8n cron → Claude API → nudges table. This is the local twin.)
+  const nudge = useMemo(() => {
+    const week = pulse.slice(7).reduce((a, p) => a + p.count, 0)
+    const best = [...pulse].sort((a, b) => b.count - a.count)[0]
+    const lastLog = dailyLogs[0]
+    const day = new Date().getDate()
+    const options = [
+      todaysEvents.length > 0
+        ? `${todaysEvents.length} ship${todaysEvents.length > 1 ? 's' : ''} already today — and ${week} this week. ${profile.streakCurrent} days straight now. Whatever you're doing, it's working.`
+        : `Quiet so far today, but your ${profile.streakCurrent}-day streak says you always show up. One small ship counts.`,
+      best.count > 0
+        ? `Your best recent day was ${format(new Date(best.date + 'T12:00:00'), 'EEEE')} — ${best.count} ships. Days like that start with one push before lunch.`
+        : `Every builder has slow stretches. The log remembers the comebacks, not the pauses.`,
+      lastLog?.whatILearned
+        ? `Last log you wrote: “${lastLog.whatILearned.slice(0, 80)}”. That lesson is already paying rent.`
+        : `${profile.totalShips} things shipped and counting. ${profile.projectName} exists because you kept going.`,
+    ]
+    return options[day % options.length]
+  }, [pulse, todaysEvents.length, profile, dailyLogs])
+
   const [built, setBuilt] = useState(existingLog?.whatIBuilt ?? '')
   const [blocked, setBlocked] = useState(existingLog?.whatBlockedMe ?? '')
   const [learned, setLearned] = useState(existingLog?.whatILearned ?? '')
@@ -135,18 +156,64 @@ export default function Today() {
             <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">Ship pulse · last 14 days</span>
             <span className="font-mono text-[10px] text-muted">{pulse.reduce((a, p) => a + p.count, 0)} ships</span>
           </div>
-          <div className="flex h-16 items-end gap-1.5">
+          <div className="flex h-20 items-end gap-1.5">
             {pulse.map((p, i) => (
               <motion.div
                 key={p.date}
-                initial={{ height: 0 }}
-                animate={{ height: `${Math.max(8, (p.count / maxPulse) * 100)}%` }}
-                transition={{ delay: 0.3 + i * 0.04, duration: 0.5, ease: 'easeOut' }}
-                title={`${p.date}: ${p.count} ships`}
-                className={`flex-1 rounded-t-md ${i === 13 ? 'bg-accent shadow-[0_0_16px_rgba(99,102,241,0.5)]' : p.count > 0 ? 'bg-accent/40' : 'bg-white/5'}`}
-              />
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: `${Math.max(10, (p.count / maxPulse) * 100)}%`, opacity: 1 }}
+                whileHover={{ scaleY: 1.06, opacity: 1 }}
+                transition={{ delay: 0.25 + i * 0.05, type: 'spring', stiffness: 200, damping: 20 }}
+                title={`${format(new Date(p.date + 'T12:00:00'), 'EEE d MMM')}: ${p.count} ships`}
+                className="group relative flex-1 origin-bottom cursor-default rounded-t-md"
+                style={{
+                  background: i === 13
+                    ? 'linear-gradient(180deg, #ec4899, #6366f1)'
+                    : p.count > 0
+                      ? `linear-gradient(180deg, rgba(99,102,241,${0.35 + (p.count / maxPulse) * 0.55}), rgba(99,102,241,0.15))`
+                      : 'rgba(255,255,255,0.05)',
+                  boxShadow: i === 13 ? '0 0 22px rgba(99,102,241,0.55)' : undefined,
+                }}
+              >
+                {/* Count bubble on hover */}
+                <span className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md bg-elevated px-1.5 py-0.5 font-mono text-[9px] text-primary opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  {p.count}
+                </span>
+                {i === 13 && (
+                  <motion.span
+                    className="absolute inset-0 rounded-t-md bg-white/25"
+                    animate={{ opacity: [0, 0.5, 0] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                )}
+              </motion.div>
             ))}
           </div>
+          <div className="mt-1 flex gap-1.5">
+            {pulse.map((p, i) => (
+              <span key={p.date} className={`flex-1 text-center font-mono text-[8px] ${i === 13 ? 'font-bold text-accent' : 'text-muted/70'}`}>
+                {i === 13 ? 'now' : format(new Date(p.date + 'T12:00:00'), 'EEEEE')}
+              </span>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* AI companion — one short note a day, receipts included */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
+        className="mt-4 flex items-start gap-3 rounded-2xl border border-accent/25 bg-accent/[0.06] p-4"
+      >
+        <motion.span
+          className="mt-0.5 text-lg"
+          animate={{ rotate: [0, -6, 6, 0] }}
+          transition={{ duration: 4, repeat: Infinity, repeatDelay: 3 }}
+        >
+          🤖
+        </motion.span>
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-accent">Your companion</div>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-secondary">{nudge}</p>
         </div>
       </motion.div>
 
@@ -190,7 +257,10 @@ export default function Today() {
         {/* Today's progress */}
         <GlassCard className="lg:col-span-3">
           <div className="flex items-center justify-between">
-            <SectionTitle>Today's Progress</SectionTitle>
+            <div>
+              <SectionTitle>Captured Today</SectionTitle>
+              <p className="-mt-2 mb-3 text-[11px] text-muted">Auto-captured from your tools + anything you log by hand</p>
+            </div>
             <span className="font-mono text-xs text-muted">{todaysEvents.length} ships</span>
           </div>
           <motion.div initial="initial" animate="animate" variants={{ animate: { transition: { staggerChildren: 0.08 } } }} className="space-y-2.5">

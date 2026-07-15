@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { format, isToday, isYesterday, parseISO } from 'date-fns'
-import { Pin, Trash2 } from 'lucide-react'
+import { format, isToday, isYesterday, parseISO, subDays } from 'date-fns'
+import { Pin, Trash2, Sparkles, History } from 'lucide-react'
 import { useShipLog } from '../lib/store'
 import { SOURCE_LABEL, type EventCategory } from '../lib/types'
-import { Page, CategoryPill } from '../components/ui'
+import { Page, CategoryPill, CountUp } from '../components/ui'
 
 const FILTERS: { key: EventCategory | 'all'; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -49,8 +50,60 @@ export default function Timeline() {
     return [...map.entries()]
   }, [visible])
 
+  const thisWeek = useMemo(() => {
+    const cutoff = format(subDays(new Date(), 7), 'yyyy-MM-dd')
+    return events.filter(e => e.eventDate >= cutoff).length
+  }, [events])
+  const lastWeek = useMemo(() => {
+    const from = format(subDays(new Date(), 14), 'yyyy-MM-dd')
+    const to = format(subDays(new Date(), 7), 'yyyy-MM-dd')
+    return events.filter(e => e.eventDate >= from && e.eventDate < to).length
+  }, [events])
+  const delta = lastWeek > 0 ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : null
+
+  // Memory hook: what were you shipping a month ago today?
+  const onThisDay = useMemo(() => {
+    const d = format(subDays(new Date(), 30), 'yyyy-MM-dd')
+    return { date: d, events: events.filter(e => e.eventDate === d).slice(0, 2) }
+  }, [events])
+
   return (
     <Page>
+      {/* The story so far */}
+      <div className="mb-5 grid grid-cols-3 gap-3">
+        <div className="glass !rounded-2xl p-3.5 text-center">
+          <CountUp value={events.length} className="text-xl font-bold text-primary" />
+          <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted">total ships</div>
+        </div>
+        <div className="glass !rounded-2xl p-3.5 text-center">
+          <CountUp value={thisWeek} className="text-xl font-bold text-primary" />
+          <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted">
+            this week {delta !== null && <span className={delta >= 0 ? 'text-success' : 'text-warning'}>{delta >= 0 ? '↑' : '↓'}{Math.abs(delta)}%</span>}
+          </div>
+        </div>
+        <div className="glass !rounded-2xl p-3.5 text-center">
+          <CountUp value={pinned.length} className="text-xl font-bold text-primary" />
+          <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted">pinned moments</div>
+        </div>
+      </div>
+
+      {/* Memory hook */}
+      {onThisDay.events.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          className="mb-5 flex items-start gap-3 rounded-2xl border border-line bg-white/[0.02] p-4"
+        >
+          <History size={16} className="mt-0.5 shrink-0 text-accent" />
+          <div className="min-w-0">
+            <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted">One month ago today</div>
+            {onThisDay.events.map(e => (
+              <div key={e.id} className="mt-1 truncate text-[13px] text-secondary">· {e.title}</div>
+            ))}
+            <div className="mt-1 text-[11px] text-muted">Look how far the project has come since.</div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Filters */}
       <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map(f => (
@@ -104,6 +157,7 @@ export default function Timeline() {
                     key={e.id}
                     whileHover={{ y: -1, borderColor: 'rgba(255,255,255,0.12)' }}
                     className="glass group p-4"
+                    style={e.category === 'milestone' ? { borderColor: 'rgba(252,211,77,0.35)', boxShadow: '0 0 24px rgba(252,211,77,0.12), 0 8px 32px rgba(0,0,0,0.4)' } : undefined}
                   >
                     <EventRow event={e} onPin={() => togglePin(e.id)} onDelete={() => deleteEvent(e.id)} expanded={expanded === e.id} onExpand={() => setExpanded(x => x === e.id ? null : e.id)} />
                   </motion.div>
@@ -121,6 +175,11 @@ export default function Timeline() {
           </button>
         )}
       </div>
+
+      {/* Turn history into content */}
+      <Link to="/app/write" className="sheen mt-2 flex items-center justify-center gap-2 rounded-2xl bg-accent/90 py-3.5 text-sm font-semibold text-white shadow-[0_0_28px_rgba(99,102,241,0.35)]">
+        <Sparkles size={15} /> This timeline is content. Turn it into a post →
+      </Link>
     </Page>
   )
 }

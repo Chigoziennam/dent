@@ -21,7 +21,7 @@ const TIERS = [
   },
   {
     name: 'Pro',
-    price: { m: 19, y: 15 },
+    price: { m: 9, y: 7 },
     tag: 'For the daily shipper',
     features: [
       'Unlimited events & integrations',
@@ -36,7 +36,7 @@ const TIERS = [
   },
   {
     name: 'CEO Mode',
-    price: { m: 49, y: 39 },
+    price: { m: 19, y: 15 },
     tag: 'For the builder becoming a founder',
     features: [
       'Everything in Pro',
@@ -145,7 +145,7 @@ export default function Pricing() {
         </motion.div>
 
         <p className="mt-10 text-center text-xs text-muted">
-          Beta period: every feature is unlocked for everyone. Pricing kicks in at launch — early builders keep a lifetime discount.
+          Launch pricing — locked in forever for early builders. Every feature is unlocked for everyone during the beta.
         </p>
       </div>
     </div>

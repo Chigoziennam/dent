@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { LogOut, ExternalLink, Check } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useShipLog } from '../lib/store'
-import type { Tone } from '../lib/types'
+import { TONE_META, type Tone } from '../lib/types'
 import { Page, GlassCard, SectionTitle } from '../components/ui'
 
 export default function Settings() {
@@ -98,18 +98,22 @@ export default function Settings() {
       <GlassCard className="mt-4">
         <SectionTitle>Preferences</SectionTitle>
         <div className="text-xs font-medium text-secondary">Default writing voice</div>
-        <div className="mt-2 flex gap-2">
-          {(['founder', 'technical', 'storytelling'] as Tone[]).map(t => (
-            <button key={t} onClick={() => setForm({ ...form, tone: t })}
-              className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium capitalize transition-colors ${form.tone === t ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted'}`}>
-              {t}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(Object.keys(TONE_META) as Tone[]).map(t => (
+            <button key={t} onClick={() => setForm({ ...form, tone: t })} title={TONE_META[t].hint}
+              className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${form.tone === t ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted'}`}>
+              {TONE_META[t].label}
             </button>
           ))}
         </div>
         <div className="mt-4 text-xs font-medium text-secondary">Theme</div>
         <div className="mt-2 flex gap-2">
-          <span className="rounded-full border border-accent/60 bg-accent/10 px-3.5 py-1.5 text-[12.5px] font-medium text-accent">Dark</span>
-          <span className="cursor-not-allowed rounded-full border border-line px-3.5 py-1.5 text-[12.5px] text-muted opacity-50">Light — soon</span>
+          {(['dark', 'light'] as const).map(th => (
+            <button key={th} onClick={() => { setForm({ ...form, theme: th }); updateProfile({ theme: th }) }}
+              className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium capitalize transition-colors ${(form.theme ?? 'dark') === th ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted'}`}>
+              {th === 'dark' ? '🌙 Dark' : '☀️ Light'}
+            </button>
+          ))}
         </div>
       </GlassCard>
 
@@ -133,9 +137,19 @@ const HUES = [245, 200, 160, 30, 330, 275]
 // portraits, robots and pixel builders that actually look like a profile pic
 const db = (style: string, seed: string) => `/avatars/${style}-${seed}.svg`
 const TECH_AVATARS = [
+  // portraits — every builder, every background
   db('notionists', 'kernel'), db('notionists', 'segfault'), db('notionists', 'lambda'), db('notionists', 'vector'),
   db('adventurer', 'turing'), db('adventurer', 'ada'), db('adventurer', 'hopper'), db('adventurer', 'linus'),
+  db('adventurer', 'zara'), db('adventurer', 'kwame'), db('adventurer', 'mei'), db('adventurer', 'diego'),
+  db('adventurer', 'amina'), db('adventurer', 'raj'),
+  // fun & funny
+  db('big-smile', 'byte'), db('big-smile', 'pixel'), db('big-smile', 'cache'), db('big-smile', 'sudo'),
+  db('croodles', 'doodle'), db('croodles', 'sketch'), db('fun-emoji', 'zap'), db('fun-emoji', 'grin'),
+  // space & minimal art
+  db('micah', 'nova'), db('micah', 'orbit'), db('micah', 'cosmo'), db('micah', 'luna'),
+  // robots & pixels
   db('bottts', 'mainframe'), db('bottts', 'compiler'), db('bottts', 'daemon'), db('bottts', 'cron'),
+  db('bottts', 'astro'), db('bottts', 'rocket'),
   db('pixel-art', 'shipit'), db('pixel-art', 'debug'), db('pixel-art', 'deploy'), db('pixel-art', 'merge'),
 ]
 

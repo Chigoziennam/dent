@@ -19,20 +19,110 @@
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --ink: #f0f0f5;
+  --ink-2: #8888a0;
+  --ink-3: #555566;
+  --edge: rgba(255, 255, 255, 0.06);
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --wash: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme='light'] {
+  --bg: #f4f4f8;
+  --surface: #ffffff;
+  --ink: #16161f;
+  --ink-2: #4d4d63;
+  --ink-3: #8a8aa0;
+  --edge: rgba(20, 20, 40, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --wash: rgba(20, 20, 40, 0.04);
+  color-scheme: light;
+}
+
+/* Remap the Tailwind tokens onto the theme variables */
+@theme inline {
+  --color-base: var(--bg);
+  --color-surface: var(--surface);
+  --color-primary: var(--ink);
+  --color-secondary: var(--ink-2);
+  --color-muted: var(--ink-3);
+  --color-line: var(--edge);
+}
+
 html {
-  background: #0a0a0f;
+  background: var(--bg);
   color-scheme: dark;
   -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: #0a0a0f;
-  color: #f0f0f5;
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--font-sans);
   overscroll-behavior-y: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Light theme: soften the dark-tuned washes */
+:root[data-theme='light'] .glass {
+  background: var(--glass-bg);
+  border-color: var(--edge);
+  box-shadow: 0 8px 32px rgba(30, 30, 60, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+:root[data-theme='light'] .glass-strong {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--edge);
+  box-shadow: 0 24px 64px rgba(30, 30, 60, 0.18);
+}
+:root[data-theme='light'] .bg-white\/\[0\.02\],
+:root[data-theme='light'] .bg-white\/\[0\.03\],
+:root[data-theme='light'] .bg-white\/5 { background-color: var(--wash); }
+:root[data-theme='light'] .grid-bg {
+  background-image:
+    linear-gradient(rgba(20,20,40,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20,20,40,0.05) 1px, transparent 1px);
+}
+
+/* ── Aurora: living gradient background ── */
+@keyframes aurora-drift {
+  0% { transform: translate(-8%, -6%) rotate(0deg) scale(1); }
+  33% { transform: translate(6%, 4%) rotate(45deg) scale(1.15); }
+  66% { transform: translate(-4%, 8%) rotate(-30deg) scale(0.95); }
+  100% { transform: translate(-8%, -6%) rotate(0deg) scale(1); }
+}
+@keyframes aurora-hue {
+  0%, 100% { filter: blur(70px) hue-rotate(0deg); }
+  50% { filter: blur(70px) hue-rotate(40deg); }
+}
+.aurora {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  opacity: 0.5;
+  filter: blur(70px);
+  background:
+    radial-gradient(ellipse 45% 35% at 25% 30%, rgba(99, 102, 241, 0.5), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 75% 25%, rgba(236, 72, 153, 0.35), transparent 70%),
+    radial-gradient(ellipse 50% 40% at 55% 75%, rgba(6, 182, 212, 0.28), transparent 70%),
+    radial-gradient(ellipse 35% 30% at 15% 80%, rgba(139, 92, 246, 0.35), transparent 70%);
+  animation: aurora-drift 26s ease-in-out infinite, aurora-hue 18s ease-in-out infinite;
+}
+:root[data-theme='light'] .aurora { opacity: 0.35; }
+
+/* Starfield twinkle for hero sections */
+@keyframes twinkle { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.7; } }
+.star {
+  position: absolute;
+  width: 2px; height: 2px;
+  border-radius: 9999px;
+  background: white;
+  animation: twinkle 3s ease-in-out infinite;
+}
+:root[data-theme='light'] .star { background: #6366f1; }
 
 /* Glass panel recipe */
 .glass {

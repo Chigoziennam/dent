@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, startOfWeek, addDays, parseISO } from 'date-fns'
-import { Copy, RefreshCw, Send, Check } from 'lucide-react'
+import { Copy, RefreshCw, Send, Check, ExternalLink, Trophy } from 'lucide-react'
 import { useShipLog, todayStr } from '../lib/store'
-import { generateContent } from '../lib/ai'
-import type { ContentPlatform, Tone } from '../lib/types'
+import { generateContent, composeUrl } from '../lib/ai'
+import { TONE_META, CATEGORY_META, type ContentPlatform, type Tone, type EventCategory } from '../lib/types'
 import { Page, GlassCard, CountUp, CategoryPill, SectionTitle, stagger } from '../components/ui'
 import { Typewriter } from '../components/Typewriter'
 
@@ -13,7 +13,7 @@ const TABS: { key: ContentPlatform; label: string }[] = [
   { key: 'linkedin', label: '💼 LinkedIn' },
   { key: 'newsletter', label: '📰 Newsletter' },
 ]
-const TONES: Tone[] = ['founder', 'technical', 'storytelling']
+const TONES = Object.keys(TONE_META) as Tone[]
 
 export default function Week() {
   const { events, dailyLogs, profile, saveContent, publishChangelog } = useShipLog()
@@ -67,6 +67,24 @@ export default function Week() {
   ]
   const dayEvents = weekEvents.filter(e => e.eventDate === selectedDay)
 
+  const bestDay = useMemo(() => {
+    const counts = days.map(d => ({ date: d, count: weekEvents.filter(e => e.eventDate === d).length }))
+    return counts.sort((a, b) => b.count - a.count)[0]
+  }, [days, weekEvents])
+
+  const catMix = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of weekEvents) m.set(e.category, (m.get(e.category) ?? 0) + 1)
+    return [...m.entries()].sort((a, b) => b[1] - a[1])
+  }, [weekEvents])
+
+  const copyAndOpen = async () => {
+    if (!draft) return
+    await navigator.clipboard.writeText(draft)
+    const { url } = composeUrl(tab, draft)
+    if (url) window.open(url, '_blank', 'noopener')
+  }
+
   return (
     <Page>
       <motion.div initial="initial" animate="animate" variants={stagger}>
@@ -80,24 +98,75 @@ export default function Week() {
           ))}
         </motion.div>
 
+        {/* Best day + category mix */}
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <GlassCard className="!p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warning/15">
+                <Trophy size={18} className="text-warning" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">Best day this week</div>
+                {bestDay && bestDay.count > 0 ? (
+                  <div className="text-sm font-semibold text-primary">
+                    {format(parseISO(bestDay.date), 'EEEE')} — <span className="text-warning">{bestDay.count} ships</span>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted">The week is young. Claim it.</div>
+                )}
+              </div>
+            </div>
+          </GlassCard>
+          <GlassCard className="!p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">What the week was made of</div>
+            <div className="mt-2 flex h-3 w-full overflow-hidden rounded-full bg-white/5">
+              {catMix.map(([cat, n], i) => (
+                <motion.div
+                  key={cat}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(n / Math.max(1, weekEvents.length)) * 100}%` }}
+                  transition={{ delay: 0.2 + i * 0.08, duration: 0.6, ease: 'easeOut' }}
+                  style={{ background: CATEGORY_META[cat as EventCategory].color }}
+                  title={`${CATEGORY_META[cat as EventCategory].label}: ${n}`}
+                />
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              {catMix.slice(0, 4).map(([cat, n]) => (
+                <span key={cat} className="flex items-center gap-1.5 text-[10px] text-secondary">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: CATEGORY_META[cat as EventCategory].color }} />
+                  {CATEGORY_META[cat as EventCategory].label} · {n}
+                </span>
+              ))}
+            </div>
+          </GlassCard>
+        </div>
+
         {/* Day nodes */}
         <GlassCard className="mt-4">
           <SectionTitle>Week Timeline</SectionTitle>
-          <div className="flex items-start justify-between">
+          <div className="flex items-end justify-between gap-1.5">
             {days.map(d => {
               const count = weekEvents.filter(e => e.eventDate === d).length
               const isFuture = d > todayStr()
               const active = selectedDay === d
+              const max = Math.max(1, ...days.map(dd => weekEvents.filter(e => e.eventDate === dd).length))
               return (
-                <button key={d} disabled={isFuture} onClick={() => setSelectedDay(d)} className="flex flex-1 flex-col items-center gap-1.5 disabled:opacity-30">
-                  <span className="text-[11px] font-medium text-secondary">{format(parseISO(d), 'EEE')}</span>
+                <button key={d} disabled={isFuture} onClick={() => setSelectedDay(d)} className="group flex flex-1 flex-col items-center gap-1.5 disabled:opacity-30">
+                  <span className="font-mono text-[10px] text-muted">{count > 0 ? count : ''}</span>
                   <motion.div
-                    animate={active ? { scale: 1.15 } : { scale: 1 }}
-                    className={`flex h-9 w-9 items-center justify-center rounded-full font-mono text-xs font-semibold transition-shadow ${active ? 'bg-accent text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]' : count > 0 ? 'bg-accent/15 text-accent' : 'bg-white/5 text-muted'}`}
-                  >
-                    {count}
-                  </motion.div>
-                  <span className="text-[10px] text-muted">{d === todayStr() ? 'Today' : format(parseISO(d), 'd')}</span>
+                    initial={{ height: 6 }}
+                    animate={{ height: 6 + (count / max) * 52 }}
+                    transition={{ type: 'spring', stiffness: 200, damping: 22 }}
+                    className={`w-full max-w-10 rounded-t-lg transition-all ${active ? 'shadow-[0_0_20px_rgba(99,102,241,0.5)]' : ''}`}
+                    style={{
+                      background: active
+                        ? 'linear-gradient(180deg, #ec4899, #6366f1)'
+                        : count > 0 ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)',
+                    }}
+                  />
+                  <span className={`text-[11px] font-medium ${active ? 'text-primary' : 'text-secondary'}`}>{format(parseISO(d), 'EEE')}</span>
+                  <span className={`text-[10px] ${d === todayStr() ? 'font-bold text-accent' : 'text-muted'}`}>{d === todayStr() ? 'Today' : format(parseISO(d), 'd')}</span>
                 </button>
               )
             })}
@@ -133,9 +202,9 @@ export default function Week() {
             </div>
             <div className="flex gap-1">
               {TONES.map(t => (
-                <button key={t} onClick={() => setTone(t)}
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-medium capitalize transition-colors ${tone === t ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted hover:text-secondary'}`}>
-                  {t}
+                <button key={t} onClick={() => setTone(t)} title={TONE_META[t].hint}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${tone === t ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted hover:text-secondary'}`}>
+                  {TONE_META[t].label}
                 </button>
               ))}
             </div>
@@ -161,6 +230,7 @@ export default function Week() {
               <RefreshCw size={13} className={generating ? 'animate-spin' : ''} /> {draft ? 'Regenerate' : 'Generate'}
             </motion.button>
             <ActionBtn onClick={copy} icon={copied ? Check : Copy} label={copied ? 'Copied' : 'Copy'} disabled={!draft} />
+            {composeUrl(tab, draft ?? '').url && <ActionBtn onClick={copyAndOpen} icon={ExternalLink} label="Copy & open" disabled={!draft} />}
             <ActionBtn onClick={saveDraft} icon={Send} label="Save Draft" disabled={!draft} />
             <ActionBtn onClick={publish} icon={Send} label="Publish to Changelog" disabled={!draft} />
           </div>

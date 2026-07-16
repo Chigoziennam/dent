@@ -230,3 +230,39 @@ alter table telemetry enable row level security;
 -- Anyone may write a signal; only you (service role / dashboard) can read.
 drop policy if exists "insert only" on telemetry;
 create policy "insert only" on telemetry for insert with check (true);
+
+-- 11. AUTO-PROFILE ON SIGNUP ---------------------------------
+-- Creates the profiles row the moment someone signs up (email,
+-- GitHub, Google, Apple — any provider). Username derives from
+-- email or provider handle; users can change it in Settings.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, username, display_name, avatar_url, github_username)
+  values (
+    new.id,
+    coalesce(
+      new.raw_user_meta_data->>'user_name',
+      new.raw_user_meta_data->>'preferred_username',
+      split_part(new.email, '@', 1)
+    ) || '_' || left(new.id::text, 4),
+    coalesce(
+      new.raw_user_meta_data->>'full_name',
+      new.raw_user_meta_data->>'name',
+      split_part(new.email, '@', 1)
+    ),
+    new.raw_user_meta_data->>'avatar_url',
+    new.raw_user_meta_data->>'user_name'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();

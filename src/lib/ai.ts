@@ -336,6 +336,32 @@ export async function copilotAnswer(question: string, ctx: CopilotContext): Prom
     dailyLogs: ctx.dailyLogs.slice(0, 14).map(l => ({ date: l.logDate, built: l.whatIBuilt, learned: l.whatILearned, mood: l.mood })),
   })
   if (alive) return alive
+  // Direct Claude fallback: real AI the moment VITE_ANTHROPIC_API_KEY exists.
+  // TODO(production): retire this path once the n8n brain is live — key belongs server-side.
+  if (API_KEY) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 400,
+          system: `You are the ShipLog Co-pilot for ${ctx.displayName}, a founder building ${ctx.projectName}. You have their full shipping log. Be a real companion: specific, warm, brief (2-4 sentences), reference their actual events by name and date. Motivate with receipts, never generic hype. If asked "when did I X", answer from the events list.`,
+          messages: [{
+            role: 'user',
+            content: `My streak: ${ctx.streak} days.\nMy recent events:\n${ctx.events.slice(0, 60).map(e => `- ${e.eventDate} [${e.category}] ${e.title}`).join('\n')}\n\nRecent reflections:\n${ctx.dailyLogs.slice(0, 10).map(l => `${l.logDate}: built ${l.whatIBuilt}; learned ${l.whatILearned}`).join('\n')}\n\nMy question: ${question}`,
+          }],
+        }),
+      })
+      const data = await res.json()
+      if (data?.content?.[0]?.text) return data.content[0].text
+    } catch { /* fall through to local engine */ }
+  }
   await new Promise(r => setTimeout(r, 350))
   return localAnswer(question, ctx)
 }

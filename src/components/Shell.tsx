@@ -10,6 +10,7 @@ import { useShipLog } from '../lib/store'
 import { Logo, StreakBadge, SpaceBackdrop } from './ui'
 import { CommandPalette } from './CommandPalette'
 import { AchievementToast } from './AchievementToast'
+import { Copilot } from './Copilot'
 
 const NAV = [
   { to: '/app/today', label: 'Today', icon: Sun },
@@ -190,6 +191,7 @@ export default function Shell() {
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       </AnimatePresence>
       <AchievementToast />
+      <Copilot />
     </div>
   )
 }

@@ -1,8 +1,42 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Check, ArrowLeft, Crown } from 'lucide-react'
 import { SpaceBackdrop, Logo } from '../components/ui'
+import { useShipLog } from '../lib/store'
+import { track } from '../lib/telemetry'
+
+type Currency = 'NGN' | 'USD'
+
+// Nigeria pays in naira — fair local pricing, not dollar-converted pain
+const PRICES: Record<string, Record<Currency, { m: number; y: number }>> = {
+  Free: { NGN: { m: 0, y: 0 }, USD: { m: 0, y: 0 } },
+  Pro: { NGN: { m: 5000, y: 4200 }, USD: { m: 9, y: 7 } },
+  'CEO Mode': { NGN: { m: 10000, y: 8300 }, USD: { m: 19, y: 15 } },
+}
+const SYMBOL: Record<Currency, string> = { NGN: '₦', USD: '$' }
+
+function detectCurrency(): Currency {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (tz === 'Africa/Lagos') return 'NGN'
+    if (navigator.language.toLowerCase().includes('-ng')) return 'NGN'
+  } catch { /* default USD */ }
+  return 'USD'
+}
+
+// Paystack inline checkout — loads their script once, pays to YOUR account
+let paystackLoading: Promise<void> | null = null
+function loadPaystack(): Promise<void> {
+  if (paystackLoading) return paystackLoading
+  paystackLoading = new Promise(resolve => {
+    const s = document.createElement('script')
+    s.src = 'https://js.paystack.co/v2/inline.js'
+    s.onload = () => resolve()
+    document.body.appendChild(s)
+  })
+  return paystackLoading
+}
 
 const TIERS = [
   {
@@ -54,6 +88,40 @@ const TIERS = [
 
 export default function Pricing() {
   const [yearly, setYearly] = useState(false)
+  const [currency, setCurrency] = useState<Currency>(detectCurrency())
+  const [payMsg, setPayMsg] = useState<string | null>(null)
+  const { creds, updateProfile } = useShipLog()
+
+  useEffect(() => { track('plan_viewed', { currency }) }, [currency])
+
+  // Real checkout when the founder's Paystack key is set and we're in NGN
+  const checkout = async (tierName: string) => {
+    const amount = PRICES[tierName]?.[currency][yearly ? 'y' : 'm'] ?? 0
+    if (amount === 0) return
+    if (currency !== 'NGN' || !creds.paystackPublicKey) {
+      setPayMsg('Card payments go live at launch — Nigerian builders pay in naira via Paystack.')
+      setTimeout(() => setPayMsg(null), 3000)
+      return
+    }
+    const email = window.prompt('Email for your receipt:')
+    if (!email?.includes('@')) return
+    await loadPaystack()
+    const Pop = (window as unknown as { PaystackPop: new () => { newTransaction: (o: Record<string, unknown>) => void } }).PaystackPop
+    new Pop().newTransaction({
+      key: creds.paystackPublicKey,
+      email,
+      amount: amount * 100, // kobo
+      currency: 'NGN',
+      metadata: { tier: tierName, cycle: yearly ? 'yearly' : 'monthly' },
+      onSuccess: () => {
+        updateProfile({ tier: tierName === 'CEO Mode' ? 'team' : 'pro' })
+        setPayMsg('Payment received — welcome aboard! Your plan is active. 🎉')
+        setTimeout(() => setPayMsg(null), 4000)
+      },
+      onCancel: () => {},
+    })
+  }
+
   return (
     <div className="relative min-h-dvh overflow-x-clip bg-base">
       <div className="pointer-events-none fixed inset-0"><SpaceBackdrop /></div>
@@ -79,8 +147,22 @@ export default function Pricing() {
           Start free forever. Upgrade when your audience — or your ambition — outgrows the plan.
         </p>
 
+        {/* Currency */}
+        <div className="mt-6 flex items-center justify-center gap-2">
+          {(['NGN', 'USD'] as Currency[]).map(c => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCurrency(c)}
+              className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${currency === c ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted hover:text-secondary'}`}
+            >
+              {c === 'NGN' ? '🇳🇬 Naira' : '$ USD'}
+            </button>
+          ))}
+        </div>
+
         {/* Toggle */}
-        <div className="mt-8 flex items-center justify-center gap-3">
+        <div className="mt-4 flex items-center justify-center gap-3">
           <span className={`text-sm ${!yearly ? 'font-semibold text-primary' : 'text-muted'}`}>Monthly</span>
           <button
             onClick={() => setYearly(y => !y)}
@@ -122,8 +204,10 @@ export default function Pricing() {
               </div>
               <p className="mt-0.5 text-xs text-muted">{t.tag}</p>
               <div className="mt-4 flex items-baseline gap-1">
-                <span className="font-mono text-4xl font-bold">${yearly ? t.price.y : t.price.m}</span>
-                <span className="text-sm text-muted">/mo{yearly && t.price.m > 0 ? ' · billed yearly' : ''}</span>
+                <span className="font-mono text-4xl font-bold">
+                  {SYMBOL[currency]}{(PRICES[t.name]?.[currency][yearly ? 'y' : 'm'] ?? 0).toLocaleString()}
+                </span>
+                <span className="text-sm text-muted">/mo{yearly && (PRICES[t.name]?.[currency].m ?? 0) > 0 ? ' · billed yearly' : ''}</span>
               </div>
               <ul className="mt-5 flex-1 space-y-2.5">
                 {t.features.map(f => (
@@ -133,12 +217,22 @@ export default function Pricing() {
                 ))}
               </ul>
               <motion.div whileTap={{ scale: 0.97 }} className="mt-6">
-                <Link
-                  to="/login"
-                  className={`block rounded-xl py-3 text-center text-sm font-semibold ${t.highlight ? 'sheen bg-accent text-white shadow-[0_0_28px_rgba(99,102,241,0.4)]' : 'border border-line text-secondary transition-colors hover:border-line-hover hover:text-primary'}`}
-                >
-                  {t.cta}
-                </Link>
+                {t.name === 'Free' ? (
+                  <Link
+                    to="/login"
+                    className="block rounded-xl border border-line py-3 text-center text-sm font-semibold text-secondary transition-colors hover:border-line-hover hover:text-primary"
+                  >
+                    {t.cta}
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => checkout(t.name)}
+                    className={`block w-full rounded-xl py-3 text-center text-sm font-semibold ${t.highlight ? 'sheen bg-accent text-white shadow-[0_0_28px_rgba(99,102,241,0.4)]' : 'border border-line text-secondary transition-colors hover:border-line-hover hover:text-primary'}`}
+                  >
+                    {t.cta}{currency === 'NGN' && creds.paystackPublicKey ? ' · pay with Paystack' : ''}
+                  </button>
+                )}
               </motion.div>
             </motion.div>
           ))}
@@ -146,7 +240,17 @@ export default function Pricing() {
 
         <p className="mt-10 text-center text-xs text-muted">
           Launch pricing — locked in forever for early builders. Every feature is unlocked for everyone during the beta.
+          {currency === 'NGN' && <span className="mt-1 block">Payments in naira via Paystack — no dollar cards needed.</span>}
         </p>
+
+        {payMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            className="glass-strong fixed bottom-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap px-4 py-2.5 text-[13px] text-primary"
+          >
+            {payMsg}
+          </motion.div>
+        )}
       </div>
     </div>
   )

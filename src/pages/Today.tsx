@@ -48,6 +48,24 @@ const PROMPTS = [
 
 const QUICK_CATS: EventCategory[] = ['commit', 'feature', 'bugfix', 'deployment', 'learning', 'idea']
 
+// Each category asks its own question — a conversation, not a form
+const CAT_PROMPTS: Partial<Record<EventCategory, string>> = {
+  commit: 'What did you just push?',
+  feature: 'What can users do now that they couldn’t this morning?',
+  bugfix: 'Which bug did you finally kill?',
+  deployment: 'What did you just deploy — and where?',
+  learning: 'What did you just learn the hard way?',
+  idea: 'What idea just hit you? Trap it before it escapes.',
+}
+
+const SHIP_CHEERS = ['Logged. The streak feeds. 🔥', 'Another one in the book.', 'Future-you says thanks.', 'That’s how empires start.', 'The log never forgets.']
+
+const EFFORT = [
+  { key: 'Quick win', hint: '< 30 min' },
+  { key: 'Solid session', hint: '1–3 hrs' },
+  { key: 'Deep work', hint: 'half day+' },
+]
+
 export default function Today() {
   const { profile, events, dailyLogs, saveDailyLog, addEvent } = useShipLog()
   const [params, setParams] = useSearchParams()
@@ -67,11 +85,39 @@ export default function Today() {
   // Inline composer — the fastest path from "did a thing" to "logged"
   const [quickTitle, setQuickTitle] = useState('')
   const [quickCat, setQuickCat] = useState<EventCategory>('commit')
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [note, setNote] = useState('')
+  const [link, setLink] = useState('')
+  const [effort, setEffort] = useState<string | null>(null)
+  const [cheer, setCheer] = useState<string | null>(null)
+
   const quickShip = () => {
     if (!quickTitle.trim()) return
-    addEvent({ title: quickTitle.trim(), category: quickCat })
-    setQuickTitle('')
+    const parts: string[] = []
+    if (note.trim()) parts.push(note.trim())
+    if (effort) parts.push(`Effort: ${effort}`)
+    if (link.trim()) parts.push(`Link: ${link.trim()}`)
+    addEvent({ title: quickTitle.trim(), category: quickCat, description: parts.join('\n') || undefined })
+    setQuickTitle(''); setNote(''); setLink(''); setEffort(null); setDetailsOpen(false)
+    setCheer(SHIP_CHEERS[Math.floor(Math.random() * SHIP_CHEERS.length)])
+    setTimeout(() => setCheer(null), 2200)
   }
+
+  // Ongoing series — the projects you keep showing up for, one tap to continue
+  const ongoing = useMemo(() => {
+    const map = new Map<string, { title: string; category: EventCategory; days: Set<string>; lastDate: string }>()
+    for (const e of events) {
+      const key = e.title.replace(/\s*—\s*day \d+$/i, '').trim().toLowerCase()
+      const entry = map.get(key)
+      if (entry) {
+        entry.days.add(e.eventDate)
+        if (e.eventDate > entry.lastDate) entry.lastDate = e.eventDate
+      } else {
+        map.set(key, { title: e.title.replace(/\s*—\s*day \d+$/i, '').trim(), category: e.category, days: new Set([e.eventDate]), lastDate: e.eventDate })
+      }
+    }
+    return [...map.values()].filter(v => v.days.size >= 2).sort((a, b) => b.lastDate.localeCompare(a.lastDate)).slice(0, 4)
+  }, [events])
 
   // 14-day pulse: the shipping rhythm, front and center
   const pulse = useMemo(() => {
@@ -279,15 +325,33 @@ export default function Today() {
               </button>
             ))}
           </div>
-          <div className="mt-2.5 flex gap-2">
+          {/* Ongoing work — one tap continues the story */}
+          {ongoing.length > 0 && (
+            <div className="no-scrollbar mt-2.5 flex gap-1.5 overflow-x-auto">
+              {ongoing.map(o => (
+                <button
+                  key={o.title}
+                  type="button"
+                  onClick={() => { setQuickTitle(`${o.title} — day ${o.days.size + 1}`); setQuickCat(o.category) }}
+                  className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-white/[0.02] px-3 py-1.5 text-[11px] text-secondary transition-colors hover:border-accent/50 hover:text-primary"
+                >
+                  <span className="font-mono font-bold" style={{ color: CATEGORY_META[o.category].color }}>d{o.days.size + 1}</span>
+                  <span className="max-w-36 truncate">{o.title}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="relative mt-2.5 flex gap-2">
             <input
               value={quickTitle}
               onChange={e => setQuickTitle(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && quickShip()}
-              placeholder={`What did you just ${quickCat === 'commit' ? 'push' : 'ship'}?`}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); quickShip() } }}
+              placeholder={CAT_PROMPTS[quickCat] ?? 'What did you just ship?'}
               className="min-w-0 flex-1 rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted"
             />
             <motion.button
+              type="button"
               whileTap={{ scale: 0.96 }}
               onClick={quickShip}
               disabled={!quickTitle.trim()}
@@ -296,13 +360,65 @@ export default function Today() {
               <Plus size={14} /> Ship
             </motion.button>
             <button
-              onClick={() => setAddOpen(true)}
-              title="Detailed log — ongoing work, links, effort"
-              className="shrink-0 rounded-xl border border-line px-3 text-muted transition-colors hover:border-line-hover hover:text-secondary"
+              type="button"
+              onClick={() => setDetailsOpen(o => !o)}
+              title="Add details — note, proof link, effort"
+              className={`shrink-0 rounded-xl border px-3 transition-colors ${detailsOpen ? 'border-accent/60 text-accent' : 'border-line text-muted hover:border-line-hover hover:text-secondary'}`}
             >
               <SlidersHorizontal size={15} />
             </button>
+            <AnimatePresence>
+              {cheer && (
+                <motion.span
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: -26 }} exit={{ opacity: 0 }}
+                  transition={{ duration: 1.8, ease: 'easeOut' }}
+                  className="pointer-events-none absolute right-16 top-0 whitespace-nowrap font-mono text-xs font-bold text-accent"
+                >
+                  +10 XP · {cheer}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </div>
+
+          {/* Inline details — everything the modal had, right here */}
+          <AnimatePresence initial={false}>
+            {detailsOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="overflow-hidden"
+              >
+                <div className="mt-2.5 space-y-2">
+                  <textarea
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    rows={2}
+                    placeholder="The story behind it — what changed, why it matters (optional)"
+                    className="w-full resize-none rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted"
+                  />
+                  <input
+                    value={link}
+                    onChange={e => setLink(e.target.value)}
+                    placeholder="Proof link — PR, deploy URL, screenshot (optional)"
+                    className="w-full rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 font-mono text-xs placeholder:text-muted"
+                  />
+                  <div className="flex gap-1.5">
+                    {EFFORT.map(ef => (
+                      <button
+                        key={ef.key}
+                        type="button"
+                        onClick={() => setEffort(effort === ef.key ? null : ef.key)}
+                        className={`flex-1 rounded-lg border px-2 py-1.5 text-center transition-all ${effort === ef.key ? 'border-accent/60 bg-accent/10' : 'border-line hover:border-line-hover'}`}
+                      >
+                        <span className={`text-[11px] font-semibold ${effort === ef.key ? 'text-accent' : 'text-secondary'}`}>{ef.key}</span>
+                        <span className="ml-1 text-[9px] text-muted">{ef.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Stream */}

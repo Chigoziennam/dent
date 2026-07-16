@@ -19,7 +19,7 @@ interface ShipLogState {
   justUnlocked: string | null
   loggedIn: boolean
   // Integration credentials — stored locally on this device only
-  creds: { githubToken?: string; githubUser?: string; supabaseUrl?: string; supabaseAnon?: string }
+  creds: { githubToken?: string; githubUser?: string; supabaseUrl?: string; supabaseAnon?: string; paystackPublicKey?: string }
   aiUsed: number // AI generations used this month
 
   login: () => void

@@ -303,6 +303,80 @@ export function composeUrl(platform: ContentPlatform, body: string): { url: stri
   }
 }
 
+// ── Shipper wisdom — short words from people who ship ─────────
+export const SHIPPER_QUOTES: { text: string; who: string }[] = [
+  { text: 'When something is important enough, you do it even if odds are against you.', who: 'Elon Musk' },
+  { text: 'Real artists ship.', who: 'Steve Jobs' },
+  { text: 'Make something people want.', who: 'Paul Graham' },
+  { text: 'Play long-term games with long-term people.', who: 'Naval Ravikant' },
+  { text: 'Done is better than perfect.', who: 'Sheryl Sandberg' },
+  { text: 'The days are long but the decades are short.', who: 'Sam Altman' },
+  { text: 'Launch now, polish later.', who: 'Pieter Levels' },
+  { text: 'Ship early, ship often.', who: 'builder proverb' },
+]
+
+// ── The Co-pilot ──────────────────────────────────────────────
+// A floating companion that has read the whole log. Tries the n8n
+// brain first (real Claude); falls back to a local engine that
+// answers from the store: search, stats, motivation.
+export interface CopilotContext {
+  events: ShipEvent[]
+  dailyLogs: DailyLog[]
+  streak: number
+  projectName: string
+  displayName: string
+}
+
+export async function copilotAnswer(question: string, ctx: CopilotContext): Promise<string> {
+  const alive = await callN8n('chat', {
+    question,
+    projectName: ctx.projectName,
+    streak: ctx.streak,
+    events: ctx.events.slice(0, 60).map(e => ({ category: e.category, title: e.title, date: e.eventDate })),
+    dailyLogs: ctx.dailyLogs.slice(0, 14).map(l => ({ date: l.logDate, built: l.whatIBuilt, learned: l.whatILearned, mood: l.mood })),
+  })
+  if (alive) return alive
+  await new Promise(r => setTimeout(r, 350))
+  return localAnswer(question, ctx)
+}
+
+function localAnswer(question: string, ctx: CopilotContext): string {
+  const q = question.toLowerCase().trim()
+  const today = new Date().toISOString().slice(0, 10)
+  const todays = ctx.events.filter(e => e.eventDate === today)
+  const week = ctx.events.filter(e => e.eventDate >= new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10))
+  const quote = SHIPPER_QUOTES[question.length % SHIPPER_QUOTES.length]
+
+  // Memory search: "when did I ..." / "find ..." / "search ..."
+  const searchMatch = q.match(/(?:when did i|find|search|did i)\s+(.+)/)
+  if (searchMatch) {
+    const terms = searchMatch[1].replace(/[?.!]/g, '').split(/\s+/).filter(w => w.length > 2)
+    const hits = ctx.events.filter(e => terms.some(t => e.title.toLowerCase().includes(t))).slice(0, 4)
+    if (hits.length === 0) return `I searched the whole log — nothing matching "${terms.join(' ')}" yet. When you ship it, I'll remember it.`
+    return `Found it in the log:\n${hits.map(h => `• ${h.eventDate} — ${h.title}`).join('\n')}`
+  }
+
+  if (/streak/.test(q)) {
+    return `You're on a ${ctx.streak}-day streak. ${ctx.streak >= 21 ? 'That is elite territory — most people never see week two.' : 'Every day you show up, it gets harder to stop.'} One ship today keeps it breathing.`
+  }
+  if (/week|progress|how am i|how's it going|hows it going/.test(q)) {
+    const cats = week.reduce<Record<string, number>>((a, e) => { a[e.category] = (a[e.category] ?? 0) + 1; return a }, {})
+    const top = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c, n]) => `${n} ${c}s`).join(', ')
+    return `This week: ${week.length} ships — ${top || 'quiet so far'}. Today: ${todays.length}. ${week.length > 20 ? 'You are genuinely cooking.' : 'Room to push — pick the smallest task on ' + ctx.projectName + ' and ship it.'}`
+  }
+  if (/motivat|tired|hard|give up|stuck|burn/.test(q)) {
+    return `"${quote.text}" — ${quote.who}\n\nAnd here's your own receipt, ${ctx.displayName}: ${ctx.events.length} things shipped, ${ctx.streak} days straight. You've already survived every hard day so far. Ship one small thing, then rest.`
+  }
+  if (/what (should|do) i (do|work|ship)/.test(q)) {
+    const lastLog = ctx.dailyLogs[0]
+    return lastLog?.whatBlockedMe
+      ? `Yesterday you said this fought back: "${lastLog.whatBlockedMe}". Slay that first — blocked work compounds. Then log it and I'll celebrate with you.`
+      : `Smallest valuable thing wins. Open ${ctx.projectName}, find a 30-minute task, ship it, log it. Momentum does the rest.`
+  }
+  // Default: state of the log
+  return `Here's where you stand: ${todays.length} ships today, ${week.length} this week, ${ctx.streak}-day streak, ${ctx.events.length} lifetime. Ask me "when did I …", "how's my week", or just tell me you're tired — I've read the whole log.`
+}
+
 function countBy(events: ShipEvent[]): Record<string, number> {
   const out: Record<string, number> = {}
   for (const e of events) out[e.category] = (out[e.category] ?? 0) + 1

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+<rect width="120" height="120" rx="24" fill="#1a1a2e"/>
+<path d="M25 118 Q25 88 60 88 Q95 88 95 118 Z" fill="#b91c1c"/>
+<path d="M45 92 L60 100 L75 92 L75 118 L45 118 Z" fill="#1d4ed8"/>
+<circle cx="60" cy="52" r="30" fill="#dc2626"/>
+<path d="M30 52 Q30 20 60 20 Q90 20 90 52 L90 60 Q75 54 60 54 Q45 54 30 60 Z" fill="#991b1b"/>
+<path d="M38 46 Q46 40 54 46 L52 54 Q45 50 40 54 Z" fill="#0a0a0f"/>
+<path d="M82 46 Q74 40 66 46 L68 54 Q75 50 80 54 Z" fill="#0a0a0f"/>
+<rect x="41" y="45" width="12" height="6" rx="2" fill="#67e8f9"><animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/></rect>
+<rect x="67" y="45" width="12" height="6" rx="2" fill="#67e8f9"><animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/></rect>
+<path d="M30 52 Q45 44 60 58 Q75 44 90 52" stroke="#7f1d1d" stroke-width="1.5" fill="none"/>
+<path d="M40 64 L50 64 M55 64 L80 64" stroke="#7f1d1d" stroke-width="1.5"/>
+<circle cx="60" cy="103" r="7" fill="#0a0a0f"/>
+<text x="60" y="107" font-size="9" fill="#67e8f9" text-anchor="middle" font-family="monospace">&gt;_</text>
+</svg>

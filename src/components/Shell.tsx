@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useShipLog } from '../lib/store'
-import { Logo, StreakBadge } from './ui'
+import { Logo, StreakBadge, SpaceBackdrop } from './ui'
 import { CommandPalette } from './CommandPalette'
 import { AchievementToast } from './AchievementToast'
 
@@ -60,6 +60,10 @@ export default function Shell() {
 
   return (
     <div className="flex min-h-dvh bg-base">
+      {/* The whole cockpit floats in space */}
+      <div className="pointer-events-none fixed inset-0 opacity-60">
+        <SpaceBackdrop withFloor={false} />
+      </div>
       {/* Desktop sidebar */}
       <motion.aside
         animate={{ width: collapsed ? 64 : 240 }}

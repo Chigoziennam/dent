@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, subDays } from 'date-fns'
-import { Plus, Sparkles, PenLine, Search, CalendarRange, Flame, Hammer } from 'lucide-react'
+import { Plus, Sparkles, PenLine, Search, CalendarRange, Flame, Hammer, SlidersHorizontal } from 'lucide-react'
 import { useShipLog, todayStr } from '../lib/store'
-import { SOURCE_LABEL, levelForXP, type Mood } from '../lib/types'
-import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill, stagger } from '../components/ui'
+import { SOURCE_LABEL, CATEGORY_META, levelForXP, type Mood, type EventCategory } from '../lib/types'
+import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill } from '../components/ui'
 import { AddEventModal } from '../components/AddEventModal'
 import { Mascot } from '../components/Mascot'
 
@@ -46,8 +46,10 @@ const PROMPTS = [
   },
 ]
 
+const QUICK_CATS: EventCategory[] = ['commit', 'feature', 'bugfix', 'deployment', 'learning', 'idea']
+
 export default function Today() {
-  const { profile, events, dailyLogs, saveDailyLog } = useShipLog()
+  const { profile, events, dailyLogs, saveDailyLog, addEvent } = useShipLog()
   const [params, setParams] = useSearchParams()
   const [addOpen, setAddOpen] = useState(params.get('add') === '1')
   const [xpFloat, setXpFloat] = useState(false)
@@ -61,6 +63,15 @@ export default function Today() {
   const greeting = hour < 5 ? 'Late-night shift' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const xpToday = todaysEvents.length * 10 + (existingLog ? 25 : 0)
   const prompts = PROMPTS[new Date().getDate() % PROMPTS.length]
+
+  // Inline composer — the fastest path from "did a thing" to "logged"
+  const [quickTitle, setQuickTitle] = useState('')
+  const [quickCat, setQuickCat] = useState<EventCategory>('commit')
+  const quickShip = () => {
+    if (!quickTitle.trim()) return
+    addEvent({ title: quickTitle.trim(), category: quickCat })
+    setQuickTitle('')
+  }
 
   // 14-day pulse: the shipping rhythm, front and center
   const pulse = useMemo(() => {
@@ -118,7 +129,7 @@ export default function Today() {
       {/* ── Hero: greeting + streak ring + mascot ── */}
       <motion.div
         initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: 'easeOut' }}
-        className="glass relative overflow-hidden !rounded-3xl p-6 md:p-8"
+        className="glass noise relative overflow-hidden !rounded-3xl p-6 md:p-8"
       >
         <div className="grid-bg pointer-events-none absolute inset-0" />
         <div className="relative flex items-center justify-between gap-4">
@@ -175,7 +186,6 @@ export default function Today() {
                   boxShadow: i === 13 ? '0 0 22px rgba(99,102,241,0.55)' : undefined,
                 }}
               >
-                {/* Count bubble on hover */}
                 <span className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md bg-elevated px-1.5 py-0.5 font-mono text-[9px] text-primary opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                   {p.count}
                 </span>
@@ -246,144 +256,170 @@ export default function Today() {
                   : `It's been a minute. Open the project, pick the smallest task, ship it.`}
               </div>
             </div>
-            <button onClick={() => setAddOpen(true)} className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent">
-              + Ship
-            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <motion.div initial="initial" animate="animate" variants={stagger} className="mt-4 grid gap-4 lg:grid-cols-5">
-        {/* Today's progress */}
-        <GlassCard className="lg:col-span-3">
+      {/* ── TODAY'S LOG — one system: ship it, see it, close the day ── */}
+      <GlassCard className="mt-4 !p-0 overflow-hidden">
+        {/* Composer */}
+        <div className="border-b border-line p-5">
           <div className="flex items-center justify-between">
-            <div>
-              <SectionTitle>Captured Today</SectionTitle>
-              <p className="-mt-2 mb-3 text-[11px] text-muted">Auto-captured from your tools + anything you log by hand</p>
-            </div>
-            <span className="font-mono text-xs text-muted">{todaysEvents.length} ships</span>
+            <SectionTitle>Today's Log</SectionTitle>
+            <span className="font-mono text-xs text-muted">{todaysEvents.length} ships · +{xpToday} XP</span>
           </div>
-          <motion.div initial="initial" animate="animate" variants={{ animate: { transition: { staggerChildren: 0.08 } } }} className="space-y-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {QUICK_CATS.map(c => (
+              <button key={c} onClick={() => setQuickCat(c)}
+                className="rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all"
+                style={quickCat === c
+                  ? { color: CATEGORY_META[c].color, background: CATEGORY_META[c].bg, borderColor: CATEGORY_META[c].color }
+                  : { color: 'var(--ink-2)', borderColor: 'var(--edge)' }}>
+                {CATEGORY_META[c].label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2.5 flex gap-2">
+            <input
+              value={quickTitle}
+              onChange={e => setQuickTitle(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && quickShip()}
+              placeholder={`What did you just ${quickCat === 'commit' ? 'push' : 'ship'}?`}
+              className="min-w-0 flex-1 rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted"
+            />
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              onClick={quickShip}
+              disabled={!quickTitle.trim()}
+              className="flex shrink-0 items-center gap-1.5 rounded-xl bg-accent px-4 text-[13px] font-semibold text-white shadow-[0_0_20px_rgba(99,102,241,0.3)] disabled:opacity-40"
+            >
+              <Plus size={14} /> Ship
+            </motion.button>
+            <button
+              onClick={() => setAddOpen(true)}
+              title="Detailed log — ongoing work, links, effort"
+              className="shrink-0 rounded-xl border border-line px-3 text-muted transition-colors hover:border-line-hover hover:text-secondary"
+            >
+              <SlidersHorizontal size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* Stream */}
+        <div className="p-5">
+          <motion.div initial="initial" animate="animate" variants={{ animate: { transition: { staggerChildren: 0.07 } } }} className="space-y-2.5">
             {todaysEvents.length === 0 && (
-              <p className="py-4 text-sm text-muted">Nothing logged yet today. Ship something — or log what you already shipped.</p>
+              <p className="py-2 text-sm text-muted">Nothing logged yet. Push something — the log remembers everything.</p>
             )}
-            {todaysEvents.slice(0, 8).map((e, i) => (
+            {todaysEvents.slice(0, 10).map((e, i) => (
               <motion.div
                 key={e.id}
                 variants={{ initial: { opacity: 0, x: -12 }, animate: { opacity: 1, x: 0 } }}
                 className="flex items-center gap-3"
               >
-                <Checkmark delay={i * 0.08} />
+                <Checkmark delay={i * 0.07} />
                 <span className="min-w-0 flex-1 truncate text-sm text-primary">{e.title}</span>
                 <CategoryPill category={e.category} />
                 <span className="hidden font-mono text-[10px] text-muted sm:block">{SOURCE_LABEL[e.source]}</span>
               </motion.div>
             ))}
+            {todaysEvents.length > 10 && (
+              <button onClick={() => navigate('/app/timeline')} className="text-xs text-accent hover:underline">
+                + {todaysEvents.length - 10} more in the timeline →
+              </button>
+            )}
           </motion.div>
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => setAddOpen(true)}
-            className="mt-4 flex items-center gap-1.5 rounded-lg border border-dashed border-line px-3 py-2 text-[13px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent"
-          >
-            <Plus size={14} /> Add Event
-          </motion.button>
-        </GlassCard>
+        </div>
 
-        {/* XP card */}
-        <GlassCard className="lg:col-span-2">
-          <SectionTitle>Builder Score</SectionTitle>
-          <div className="font-mono text-3xl font-bold text-primary">+{xpToday} <span className="text-base text-accent">XP today</span></div>
-          <div className="mt-1 text-xs text-secondary">Level {level.level} · {level.name}</div>
-          <div className="mt-4"><XPBar into={level.into} needed={level.needed} level={level.level} /></div>
-          <div className="mt-4 border-t border-line pt-3 font-mono text-xs text-muted">
-            Lifetime: {profile.builderScore.toLocaleString()} XP · {profile.totalShips.toLocaleString()} ships
-          </div>
-        </GlassCard>
-      </motion.div>
-
-      {/* ── The Builder's Logbook (evening reflection) ── */}
-      <GlassCard className="mt-4 !p-0 overflow-hidden">
-        <button onClick={() => setReflectOpen(o => !o)} className="flex w-full items-center justify-between p-5 text-left">
-          <div className="min-w-0">
-            <span className="text-[15px] font-semibold">The Builder's Logbook</span>
-            {existingLog
-              ? <span className="ml-2.5 text-xs text-success">logged ✓</span>
-              : <span className="ml-2.5 text-xs text-muted">{hour >= 18 ? 'the day deserves a debrief' : 'opens properly after 6pm — early entries welcome'}</span>}
-          </div>
-          <motion.span animate={{ rotate: reflectOpen ? 180 : 0 }} className="text-muted">▾</motion.span>
-        </button>
-        <AnimatePresence initial={false}>
-          {reflectOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
-            >
-              <div className="space-y-3 px-5 pb-5">
-                <p className="text-xs leading-relaxed text-muted">
-                  Two minutes, honest answers. Future-you reads this when the motivation dips — write for them.
-                </p>
-                <Field label={prompts.built} value={built} onChange={setBuilt} placeholder="Even 'fixed one CSS bug' counts. Small ships stack." />
-                <Field label={prompts.blocked} value={blocked} onChange={setBlocked} placeholder="Name the wall. Tomorrow it's smaller." />
-                <Field label={prompts.learned} value={learned} onChange={setLearned} placeholder="The lesson you'd want back in a month." />
-                <div className="flex flex-col gap-5">
-                  <div>
-                    <div className="mb-0.5 text-xs font-medium text-secondary">Energy tank</div>
-                    <div className="mb-2 text-[11px] text-muted">How much fuel was left in you when you stopped? It shapes tomorrow's pace — and your analytics.</div>
-                    <div className="flex gap-1.5">
-                      {TANK.map(t => (
-                        <button
-                          key={t.n}
-                          onClick={() => setEnergy(t.n)}
-                          className="group flex-1 text-left"
+        {/* Logbook accordion — same system, evening chapter */}
+        <div className="border-t border-line">
+          <button onClick={() => setReflectOpen(o => !o)} className="flex w-full items-center justify-between px-5 py-4 text-left">
+            <div className="min-w-0">
+              <span className="text-[14px] font-semibold">Close out the day</span>
+              {existingLog
+                ? <span className="ml-2.5 text-xs text-success">logged ✓</span>
+                : <span className="ml-2.5 text-xs text-muted">{hour >= 18 ? 'the day deserves a debrief' : 'opens properly after 6pm'}</span>}
+            </div>
+            <motion.span animate={{ rotate: reflectOpen ? 180 : 0 }} className="text-muted">▾</motion.span>
+          </button>
+          <AnimatePresence initial={false}>
+            {reflectOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+              >
+                <div className="space-y-3 px-5 pb-5">
+                  <p className="text-xs leading-relaxed text-muted">
+                    Two minutes, honest answers. Future-you reads this when the motivation dips — write for them.
+                  </p>
+                  <Field label={prompts.built} value={built} onChange={setBuilt} placeholder="Even 'fixed one CSS bug' counts. Small ships stack." />
+                  <Field label={prompts.blocked} value={blocked} onChange={setBlocked} placeholder="Name the wall. Tomorrow it's smaller." />
+                  <Field label={prompts.learned} value={learned} onChange={setLearned} placeholder="The lesson you'd want back in a month." />
+                  <div className="flex flex-col gap-5">
+                    <div>
+                      <div className="mb-0.5 text-xs font-medium text-secondary">Energy tank</div>
+                      <div className="mb-2 text-[11px] text-muted">How much fuel was left in you when you stopped? It shapes tomorrow's pace — and your analytics.</div>
+                      <div className="flex gap-1.5">
+                        {TANK.map(t => (
+                          <button key={t.n} onClick={() => setEnergy(t.n)} className="group flex-1 text-left">
+                            <div
+                              className={`h-8 rounded-lg border transition-all ${energy >= t.n ? 'border-transparent' : 'border-line bg-white/[0.02] group-hover:border-line-hover'}`}
+                              style={energy >= t.n ? { background: `linear-gradient(135deg, ${TANK[energy - 1].color}cc, ${TANK[energy - 1].color}66)`, boxShadow: `0 0 14px ${TANK[energy - 1].color}44` } : undefined}
+                            />
+                            <div className={`mt-1 text-center text-[9.5px] font-medium uppercase tracking-wide ${energy === t.n ? 'text-primary' : 'text-muted'}`}>{t.label}</div>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-1.5 text-center text-[11px] text-secondary">
+                        <span className="font-semibold" style={{ color: TANK[energy - 1].color }}>{TANK[energy - 1].label}</span> — {TANK[energy - 1].desc}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-1.5 text-xs font-medium text-secondary">How did the day fight?</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {MOODS.map(m => (
+                          <button key={m.key} onClick={() => setMood(m.key)}
+                            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${mood === m.key ? 'border-accent bg-accent/20 text-primary' : 'border-line text-muted hover:border-line-hover'}`}>
+                            <span>{m.emoji}</span> {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      onClick={saveReflection}
+                      className="sheen rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(99,102,241,0.3)]"
+                    >
+                      {existingLog ? 'Update the log' : 'Close out the day · +25 XP'}
+                    </motion.button>
+                    <AnimatePresence>
+                      {xpFloat && (
+                        <motion.span
+                          initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -30 }} exit={{ opacity: 0 }}
+                          transition={{ duration: 1.5 }}
+                          className="absolute left-1/2 top-0 font-mono text-sm font-bold text-accent"
                         >
-                          <div
-                            className={`h-8 rounded-lg border transition-all ${energy >= t.n ? 'border-transparent' : 'border-line bg-white/[0.02] group-hover:border-line-hover'}`}
-                            style={energy >= t.n ? { background: `linear-gradient(135deg, ${TANK[energy - 1].color}cc, ${TANK[energy - 1].color}66)`, boxShadow: `0 0 14px ${TANK[energy - 1].color}44` } : undefined}
-                          />
-                          <div className={`mt-1 text-center text-[9.5px] font-medium uppercase tracking-wide ${energy === t.n ? 'text-primary' : 'text-muted'}`}>{t.label}</div>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="mt-1.5 text-center text-[11px] text-secondary">
-                      <span className="font-semibold" style={{ color: TANK[energy - 1].color }}>{TANK[energy - 1].label}</span> — {TANK[energy - 1].desc}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-1.5 text-xs font-medium text-secondary">How did the day fight?</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {MOODS.map(m => (
-                        <button key={m.key} onClick={() => setMood(m.key)}
-                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${mood === m.key ? 'border-accent bg-accent/20 text-primary' : 'border-line text-muted hover:border-line-hover'}`}>
-                          <span>{m.emoji}</span> {m.label}
-                        </button>
-                      ))}
-                    </div>
+                          +25 XP
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
-                <div className="relative">
-                  <motion.button
-                    whileTap={{ scale: 0.97 }}
-                    onClick={saveReflection}
-                    className="sheen rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(99,102,241,0.3)]"
-                  >
-                    {existingLog ? 'Update the log' : 'Close out the day · +25 XP'}
-                  </motion.button>
-                  <AnimatePresence>
-                    {xpFloat && (
-                      <motion.span
-                        initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -30 }} exit={{ opacity: 0 }}
-                        transition={{ duration: 1.5 }}
-                        className="absolute left-1/2 top-0 font-mono text-sm font-bold text-accent"
-                      >
-                        +25 XP
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* XP footer — the score, part of the same system */}
+        <div className="border-t border-line bg-white/[0.015] px-5 py-4">
+          <XPBar into={level.into} needed={level.needed} level={level.level} />
+          <div className="mt-2 flex justify-between font-mono text-[11px] text-muted">
+            <span>Lv {level.level} · {level.name}</span>
+            <span>Lifetime: {profile.builderScore.toLocaleString()} XP · {profile.totalShips.toLocaleString()} ships</span>
+          </div>
+        </div>
       </GlassCard>
 
       {/* Quick actions */}

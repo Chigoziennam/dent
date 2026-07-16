@@ -5,7 +5,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 //   VITE_SUPABASE_ANON_KEY=eyJ...
 // The anon key is designed to be public — Row Level Security is the guard —
 // but it still belongs in .env, not in chat logs or screenshots.
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
+// Normalize: people often paste the REST endpoint — the client wants the project root.
+const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '')
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
 export const supabase: SupabaseClient | null = url && anon ? createClient(url, anon) : null

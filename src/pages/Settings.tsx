@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, ExternalLink, Check } from 'lucide-react'
+import { LogOut, ExternalLink, Check, Download } from 'lucide-react'
+import { supabaseReady } from '../lib/supabase'
 import { Link } from 'react-router-dom'
 import { useShipLog } from '../lib/store'
 import { TONE_META, type Tone } from '../lib/types'
@@ -20,6 +21,25 @@ export default function Settings() {
   }
 
   const signOut = () => { logout(); navigate('/') }
+
+  // Data ownership: one click, everything you ever logged
+  const exportData = () => {
+    const s = useShipLog.getState()
+    const blob = new Blob([JSON.stringify({
+      exportedAt: new Date().toISOString(),
+      profile: s.profile,
+      events: s.events,
+      dailyLogs: s.dailyLogs,
+      content: s.content,
+      changelog: s.changelog,
+      achievements: s.unlocked,
+    }, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `shiplog-export-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
 
   return (
     <Page className="max-w-2xl">
@@ -117,6 +137,27 @@ export default function Settings() {
         </div>
       </GlassCard>
 
+      <GlassCard className="mt-4">
+        <SectionTitle>Data</SectionTitle>
+        <div className="flex flex-wrap items-center gap-3">
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={exportData}
+            className="flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-[13px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-primary"
+          >
+            <Download size={14} /> Export everything as JSON
+          </motion.button>
+          <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold ${supabaseReady ? 'bg-success/15 text-success' : 'bg-white/5 text-muted'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${supabaseReady ? 'bg-success' : 'bg-muted'}`} />
+            Supabase {supabaseReady ? 'connected' : 'not configured'}
+          </span>
+        </div>
+        <p className="mt-2.5 text-[11px] leading-relaxed text-muted">
+          Your log belongs to you — the export includes every event, reflection, draft and achievement.
+          {supabaseReady ? ' Cloud sync activates with the backend launch.' : ' Add your Supabase keys to .env to enable cloud sync.'}
+        </p>
+      </GlassCard>
+
       <div className="mt-4 flex items-center justify-between">
         <motion.button whileTap={{ scale: 0.97 }} onClick={save}
           className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(99,102,241,0.3)]">
@@ -137,6 +178,9 @@ const HUES = [245, 200, 160, 30, 330, 275]
 // portraits, robots and pixel builders that actually look like a profile pic
 const db = (style: string, seed: string) => `/avatars/${style}-${seed}.svg`
 const TECH_AVATARS = [
+  // THE SHIPLOG HEROES — original tech legends, glowing eyes and all
+  '/avatars/hero-commitman.svg', '/avatars/hero-debugger.svg', '/avatars/hero-deploystorm.svg', '/avatars/hero-kernelknight.svg',
+  '/avatars/hero-asyncavenger.svg', '/avatars/hero-gitblade.svg', '/avatars/hero-nightowl.svg', '/avatars/hero-stacksmith.svg',
   // portraits — every builder, every background
   db('notionists', 'kernel'), db('notionists', 'segfault'), db('notionists', 'lambda'), db('notionists', 'vector'),
   db('adventurer', 'turing'), db('adventurer', 'ada'), db('adventurer', 'hopper'), db('adventurer', 'linus'),

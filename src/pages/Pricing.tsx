@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Check, ArrowLeft, Crown } from 'lucide-react'
-import { Orbs, Logo } from '../components/ui'
+import { SpaceBackdrop, Logo } from '../components/ui'
 
 const TIERS = [
   {
@@ -56,7 +56,7 @@ export default function Pricing() {
   const [yearly, setYearly] = useState(false)
   return (
     <div className="relative min-h-dvh overflow-x-clip bg-base">
-      <Orbs />
+      <div className="pointer-events-none fixed inset-0"><SpaceBackdrop /></div>
       <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
         <Link to="/" className="flex items-center gap-2.5">
           <Logo size={30} /><span className="font-bold tracking-tight">ShipLog</span>

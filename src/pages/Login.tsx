@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Github, Mail, ArrowRight } from 'lucide-react'
 import { useShipLog } from '../lib/store'
-import { Orbs, Logo } from '../components/ui'
+import { SpaceBackdrop, Logo } from '../components/ui'
 
 export default function Login() {
   const login = useShipLog(s => s.login)
@@ -15,7 +15,7 @@ export default function Login() {
 
   return (
     <div className="relative flex min-h-dvh items-center justify-center bg-base px-5">
-      <Orbs />
+      <SpaceBackdrop />
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}

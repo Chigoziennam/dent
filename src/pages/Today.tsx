@@ -331,24 +331,16 @@ export default function Today() {
           </motion.div>
         </div>
 
-        {/* Logbook accordion — same system, evening chapter */}
-        <div className="border-t border-line">
-          <button onClick={() => setReflectOpen(o => !o)} className="flex w-full items-center justify-between px-5 py-4 text-left">
-            <div className="min-w-0">
-              <span className="text-[14px] font-semibold">Close out the day</span>
-              {existingLog
-                ? <span className="ml-2.5 text-xs text-success">logged ✓</span>
-                : <span className="ml-2.5 text-xs text-muted">{hour >= 18 ? 'the day deserves a debrief' : 'opens properly after 6pm'}</span>}
-            </div>
-            <motion.span animate={{ rotate: reflectOpen ? 180 : 0 }} className="text-muted">▾</motion.span>
-          </button>
-          <AnimatePresence initial={false}>
-            {reflectOpen && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-              >
-                <div className="space-y-3 px-5 pb-5">
+        {/* Evening chapter — same log, same card, the day's last entry */}
+        <div className="px-5 pb-5">
+          <div className="flex items-center gap-3 py-4">
+            <div className="h-px flex-1 bg-line" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
+              close out the day {existingLog && <span className="text-success">✓</span>}
+            </span>
+            <div className="h-px flex-1 bg-line" />
+          </div>
+          <div className="space-y-3">
                   <p className="text-xs leading-relaxed text-muted">
                     Two minutes, honest answers. Future-you reads this when the motivation dips — write for them.
                   </p>
@@ -406,10 +398,7 @@ export default function Today() {
                       )}
                     </AnimatePresence>
                   </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </div>
         </div>
 
         {/* XP footer — the score, part of the same system */}

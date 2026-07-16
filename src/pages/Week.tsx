@@ -33,8 +33,10 @@ export default function Week() {
   const draftKey = `${tab}-${tone}`
   const draft = drafts[draftKey]
 
+  const bumpAiUsage = useShipLog(s => s.bumpAiUsage)
   const generate = async () => {
     setGenerating(true)
+    bumpAiUsage()
     const text = await generateContent({
       events: weekEvents, dailyLogs: weekLogs, platform: tab, tone,
       projectName: profile.projectName, projectTagline: profile.projectTagline,

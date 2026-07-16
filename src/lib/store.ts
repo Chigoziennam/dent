@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { format, subDays } from 'date-fns'
 import { generateSeed } from './seed'
+import { track } from './telemetry'
 import type {
   ShipEvent, DailyLog, Profile, ContentPiece, ChangelogEntry,
   EventCategory, EventSource, Mood, Tone,
@@ -17,6 +18,9 @@ interface ShipLogState {
   unlocked: Record<string, string> // code -> date unlocked
   justUnlocked: string | null
   loggedIn: boolean
+  // Integration credentials — stored locally on this device only
+  creds: { githubToken?: string; githubUser?: string; supabaseUrl?: string; supabaseAnon?: string }
+  aiUsed: number // AI generations used this month
 
   login: () => void
   logout: () => void
@@ -28,6 +32,8 @@ interface ShipLogState {
   publishChangelog: (entry: Omit<ChangelogEntry, 'id' | 'publishedAt'>) => void
   updateProfile: (p: Partial<Profile>) => void
   clearUnlockToast: () => void
+  setCreds: (c: Partial<ShipLogState['creds']>) => void
+  bumpAiUsage: () => void
 }
 
 function computeStreak(events: ShipEvent[], logs: DailyLog[]): { current: number; longest: number } {
@@ -106,8 +112,10 @@ export const useShipLog = create<ShipLogState>()(
       ...buildInitial(),
       justUnlocked: null,
       loggedIn: false,
+      creds: {},
+      aiUsed: 0,
 
-      login: () => set({ loggedIn: true }),
+      login: () => { track('demo_login'); set({ loggedIn: true }) },
       logout: () => set({ loggedIn: false }),
 
       addEvent: (e) => {
@@ -135,6 +143,7 @@ export const useShipLog = create<ShipLogState>()(
         }
         const ach = checkAchievements({ events, dailyLogs: s.dailyLogs, content: s.content, profile, unlocked: s.unlocked })
         profile.builderScore += ach.bonusXP
+        track('ship_logged', { category: ev.category })
         set({ events, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
       },
 
@@ -156,6 +165,7 @@ export const useShipLog = create<ShipLogState>()(
         }
         const ach = checkAchievements({ events: s.events, dailyLogs, content: s.content, profile, unlocked: s.unlocked })
         profile.builderScore += ach.bonusXP
+        track('daily_log_saved', { mood: log.mood, energy: log.energyLevel })
         set({ dailyLogs, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
       },
 
@@ -177,6 +187,11 @@ export const useShipLog = create<ShipLogState>()(
 
       updateProfile: (p) => set(s => ({ profile: { ...s.profile, ...p } })),
       clearUnlockToast: () => set({ justUnlocked: null }),
+      setCreds: (c) => set(s => ({ creds: { ...s.creds, ...c } })),
+      bumpAiUsage: () => {
+        track('ai_generated')
+        set(s => ({ aiUsed: s.aiUsed + 1 }))
+      },
     }),
     { name: 'shiplog-v1' }
   )

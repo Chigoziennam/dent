@@ -215,3 +215,18 @@ drop policy if exists "public changelog" on changelog_entries;
 create policy "public changelog" on changelog_entries for select using (is_public);
 drop policy if exists "public events" on ship_events;
 create policy "public events" on ship_events for select using (true);
+
+-- 10. TELEMETRY (founder analytics — anonymous product signals) --
+create table if not exists telemetry (
+  id uuid primary key default gen_random_uuid(),
+  event text not null,
+  props jsonb default '{}',
+  device text,
+  ua text,
+  created_at timestamptz default now()
+);
+create index if not exists idx_telemetry_event on telemetry(event, created_at desc);
+alter table telemetry enable row level security;
+-- Anyone may write a signal; only you (service role / dashboard) can read.
+drop policy if exists "insert only" on telemetry;
+create policy "insert only" on telemetry for insert with check (true);

@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, ExternalLink, Check, Download } from 'lucide-react'
+import { LogOut, ExternalLink, Check, Download, Zap } from 'lucide-react'
 import { supabaseReady } from '../lib/supabase'
+
+const AI_LIMIT = 500 // ≈ $9 of usage on Sonnet-class models
 import { Link } from 'react-router-dom'
 import { useShipLog } from '../lib/store'
 import { TONE_META, type Tone } from '../lib/types'
 import { Page, GlassCard, SectionTitle } from '../components/ui'
 
 export default function Settings() {
-  const { profile, updateProfile, logout } = useShipLog()
+  const { profile, updateProfile, logout, aiUsed } = useShipLog()
   const [form, setForm] = useState(profile)
   const [saved, setSaved] = useState(false)
+  const [creditToast, setCreditToast] = useState(false)
   const navigate = useNavigate()
 
   const save = () => {
@@ -135,6 +138,52 @@ export default function Settings() {
             </button>
           ))}
         </div>
+      </GlassCard>
+
+      <GlassCard className="mt-4">
+        <div className="flex items-center justify-between">
+          <SectionTitle>Plan & AI Credits</SectionTitle>
+          <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${(profile.tier ?? 'free') === 'free' ? 'bg-white/5 text-muted' : 'streak-gradient text-white'}`}>
+            {(profile.tier ?? 'free') === 'free' ? 'Free plan' : profile.tier === 'team' ? 'CEO Mode' : 'Pro'}
+          </span>
+        </div>
+        <div className="flex items-baseline justify-between">
+          <span className="text-xs text-secondary">AI generations this month</span>
+          <span className="font-mono text-xs text-primary">{aiUsed} / {AI_LIMIT}</span>
+        </div>
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/5">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{
+              width: `${Math.min(100, (aiUsed / AI_LIMIT) * 100)}%`,
+              background: aiUsed / AI_LIMIT > 0.85 ? '#f59e0b' : '#6366f1',
+            }}
+          />
+        </div>
+        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+          Every plan includes $9 of AI usage a month — roughly {AI_LIMIT} generations. Past that, top up with
+          credits instead of jumping plans. Unused credits roll over.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[
+            { label: '+100 credits', price: '$3' },
+            { label: '+250 credits', price: '$6' },
+            { label: '+600 credits', price: '$12' },
+          ].map(c => (
+            <button
+              key={c.label}
+              type="button"
+              onClick={() => setCreditToast(true)}
+              className="flex items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-xs font-medium text-secondary transition-colors hover:border-accent/50 hover:text-primary"
+            >
+              <Zap size={12} className="text-warning" /> {c.label} <span className="font-mono text-muted">{c.price}</span>
+            </button>
+          ))}
+          <Link to="/pricing" className="flex items-center rounded-xl bg-accent/15 px-3.5 py-2 text-xs font-semibold text-accent hover:bg-accent/25">
+            See plans →
+          </Link>
+        </div>
+        {creditToast && <p className="mt-2 text-[11px] text-success">Credit top-ups go live with payments at launch — Paystack confirmer is already wired ✓</p>}
       </GlassCard>
 
       <GlassCard className="mt-4">

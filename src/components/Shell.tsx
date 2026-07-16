@@ -117,7 +117,18 @@ export default function Shell() {
               </div>
             )}
           </div>
-          {!collapsed && <div className="mt-2 px-1"><StreakBadge days={profile.streakCurrent} size="sm" /></div>}
+          {!collapsed && (
+            <div className="mt-2 flex items-center justify-between gap-2 px-1">
+              <StreakBadge days={profile.streakCurrent} size="sm" />
+              <NavLink
+                to="/app/settings"
+                className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${(profile.tier ?? 'free') === 'free' ? 'bg-white/5 text-muted hover:text-secondary' : 'streak-gradient text-white'}`}
+                title={(profile.tier ?? 'free') === 'free' ? 'Free plan — tap to see plans' : 'Paid plan active'}
+              >
+                {(profile.tier ?? 'free') === 'free' ? 'Free' : profile.tier === 'team' ? 'CEO' : 'Pro'}
+              </NavLink>
+            </div>
+          )}
         </div>
       </motion.aside>
 
@@ -130,7 +141,17 @@ export default function Shell() {
             </div>
             <h1 className="hidden text-[15px] font-semibold md:block">{pageTitle}</h1>
             <div className="flex items-center gap-3">
-              <span className="font-mono text-xs text-muted">{format(now, 'EEE d MMM · HH:mm')}</span>
+              <span className="flex items-center gap-1.5">
+                <motion.span
+                  className="text-sm"
+                  animate={{ y: [0, -2, 0], rotate: [0, -4, 0] }}
+                  transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                  aria-hidden
+                >
+                  🦉
+                </motion.span>
+                <span className="time-glow font-mono text-xs font-semibold">{format(now, 'EEE d MMM · HH:mm')}</span>
+              </span>
               <button onClick={() => setPaletteOpen(true)} className="rounded-lg p-2 text-secondary hover:bg-white/5 md:hidden">
                 <Search size={17} />
               </button>

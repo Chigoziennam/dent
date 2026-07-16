@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { format, subDays, startOfWeek, parseISO } from 'date-fns'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts'
 import { useShipLog } from '../lib/store'
 import { levelForXP } from '../lib/types'
 import { Page, GlassCard, CountUp, XPBar, SectionTitle, stagger } from '../components/ui'
@@ -36,6 +36,23 @@ export default function Analytics() {
     }
     return [...byWeek.entries()].map(([week, count]) => ({ week, count }))
   }, [events])
+
+  // Builder shape: what kind of builder are you?
+  const shape = useMemo(() => {
+    const n = (cats: string[]) => events.filter(e => cats.includes(e.category)).length
+    const max = Math.max(1, events.length / 3)
+    return [
+      { axis: 'Features', v: Math.min(100, (n(['feature', 'launch']) / max) * 100) },
+      { axis: 'Commits', v: Math.min(100, (n(['commit']) / max) * 100) },
+      { axis: 'Deploys', v: Math.min(100, (n(['deployment']) / max) * 100) },
+      { axis: 'Revenue', v: Math.min(100, (n(['revenue', 'customer']) / max) * 100) },
+      { axis: 'Content', v: Math.min(100, (n(['content', 'learning']) / max) * 100) },
+    ]
+  }, [events])
+
+  const avgEnergy = dailyLogs.length
+    ? Math.round((dailyLogs.reduce((s, l) => s + l.energyLevel, 0) / dailyLogs.length) * 10) / 10
+    : 0
 
   const activeDays = new Set(events.map(e => e.eventDate)).size
   const stats = [
@@ -83,7 +100,10 @@ export default function Analytics() {
                       transition={{ delay: (w * 7 + d) * 0.004, duration: 0.2 }}
                       title={`${format(parseISO(cell.date), 'MMM d')}: ${cell.count} events`}
                       className="h-3 w-3 rounded-[3px]"
-                      style={{ background: cellColor(cell.count) }}
+                      style={{
+                        background: cell.count >= 6 ? 'linear-gradient(135deg, #ec4899, #6366f1)' : cellColor(cell.count),
+                        boxShadow: cell.count >= 6 ? '0 0 8px rgba(99,102,241,0.7)' : cell.count > 2 ? '0 0 4px rgba(99,102,241,0.35)' : undefined,
+                      }}
                     />
                   ))}
                 </div>
@@ -122,6 +142,44 @@ export default function Analytics() {
             </ResponsiveContainer>
           </div>
         </GlassCard>
+
+        {/* Builder shape + energy */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <GlassCard>
+            <SectionTitle>Your builder shape</SectionTitle>
+            <p className="-mt-2 mb-1 text-[11px] text-muted">Are you shipping features or fixing forever? The pentagon knows.</p>
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart data={shape} outerRadius="72%">
+                  <PolarGrid stroke="rgba(255,255,255,0.08)" />
+                  <PolarAngleAxis dataKey="axis" tick={{ fill: '#8888a0', fontSize: 11, fontFamily: 'Space Grotesk' }} />
+                  <Radar dataKey="v" stroke="#6366f1" fill="#6366f1" fillOpacity={0.35} strokeWidth={2} animationDuration={1200} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </GlassCard>
+          <GlassCard>
+            <SectionTitle>Energy over the run</SectionTitle>
+            <div className="flex h-52 flex-col items-center justify-center gap-3">
+              <div className="relative">
+                <CountUp value={avgEnergy * 10} className="font-display text-6xl font-bold text-primary" />
+                <span className="absolute -right-8 bottom-2 font-mono text-sm text-muted">/50</span>
+              </div>
+              <div className="text-center text-sm text-secondary">
+                average tank level × 10 across {dailyLogs.length} logged days
+              </div>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <div key={n} className="h-2.5 w-9 rounded-full"
+                    style={{ background: n <= Math.round(avgEnergy) ? 'linear-gradient(90deg, #f59e0b, #22c55e)' : 'rgba(255,255,255,0.06)' }} />
+                ))}
+              </div>
+              <div className="text-[11px] text-muted">
+                {avgEnergy >= 3.5 ? 'Sustainable pace — this is how marathons get won.' : avgEnergy >= 2.5 ? 'Grinding but holding. Guard your mornings.' : 'Running hot. Schedule a slow day before the tank does it for you.'}
+              </div>
+            </div>
+          </GlassCard>
+        </div>
 
         {/* Stat cards */}
         <motion.div variants={{ animate: { transition: { staggerChildren: 0.06 } } }} className="grid grid-cols-2 gap-3 md:grid-cols-3">

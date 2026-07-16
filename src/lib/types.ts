@@ -88,6 +88,7 @@ export interface Profile {
   github: string
   tone: Tone
   theme?: 'dark' | 'light'
+  tier?: 'free' | 'pro' | 'team'
   streakCurrent: number
   streakLongest: number
   builderScore: number

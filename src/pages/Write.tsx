@@ -68,8 +68,10 @@ export default function Write() {
     }
   }
 
+  const bumpAiUsage = useShipLog(s => s.bumpAiUsage)
   const generate = async () => {
     setGenerating(true)
+    bumpAiUsage()
     const text = mode === 'manual'
       ? await humanize(raw, platform, tone, profile.projectName)
       : mode === 'fusion'

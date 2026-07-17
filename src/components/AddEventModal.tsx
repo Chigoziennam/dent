@@ -20,6 +20,7 @@ export function AddEventModal({ onClose }: { onClose: () => void }) {
   const [link, setLink] = useState('')
   const [effort, setEffort] = useState<typeof EFFORT[number]['key'] | null>(null)
   const [category, setCategory] = useState<EventCategory>('feature')
+  const [capHit, setCapHit] = useState(false)
 
   // Ongoing work: same title shipped across multiple days = a series.
   // People push the same project day after day — honor that instead of
@@ -54,7 +55,8 @@ export function AddEventModal({ onClose }: { onClose: () => void }) {
     if (description.trim()) parts.push(description.trim())
     if (effort) parts.push(`Effort: ${EFFORT.find(e => e.key === effort)!.label}`)
     if (link.trim()) parts.push(`Link: ${link.trim()}`)
-    addEvent({ title: title.trim(), category, description: parts.join('\n') || undefined })
+    const ok = addEvent({ title: title.trim(), category, description: parts.join('\n') || undefined })
+    if (!ok) { setCapHit(true); return }
     onClose()
   }
 
@@ -180,6 +182,11 @@ export function AddEventModal({ onClose }: { onClose: () => void }) {
             >
               Ship it · +10 XP
             </motion.button>
+            {capHit && (
+              <p className="mt-2.5 rounded-lg border border-warning/40 bg-warning/[0.08] px-3 py-2 text-[11px] leading-relaxed text-secondary">
+                Free plan logs 30 ships a month and you've reached it. Your GitHub commits still sync automatically — <a href="/pricing" className="font-semibold text-warning">go Pro</a> for unlimited manual logging.
+              </p>
+            )}
           </>
         )}
       </motion.div>

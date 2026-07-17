@@ -13,6 +13,7 @@ import type {
   EventCategory, EventSource, Mood, Tone,
 } from './types'
 import { ACHIEVEMENTS } from './achievements'
+import { entitlementsFor, weekKey, monthKey } from './plan'
 
 interface DentState {
   profile: Profile
@@ -29,14 +30,16 @@ interface DentState {
   seeded: boolean
   // Integration credentials — stored locally on this device only
   creds: { githubToken?: string; githubUser?: string; githubLastSync?: string; supabaseUrl?: string; supabaseAnon?: string; paystackPublicKey?: string }
-  aiUsed: number // AI generations used this month
+  aiUsed: number // AI generations used, lifetime (display)
+  aiWeek: string // Monday-anchored week key the count below belongs to
+  aiWeekCount: number // AI generations used this week (free-tier gate)
 
   login: () => void
   realLogin: (user: CloudUser) => Promise<void>
   importEvents: (incoming: ShipEvent[]) => number
   completeOnboarding: (o: { displayName: string; projectName: string; projectTagline: string; startStage: 'spark' | 'building' | 'launched' }) => void
   logout: () => void
-  addEvent: (e: { title: string; category: EventCategory; source?: EventSource; description?: string }) => void
+  addEvent: (e: { title: string; category: EventCategory; source?: EventSource; description?: string }) => boolean
   togglePin: (id: string) => void
   deleteEvent: (id: string) => void
   saveDailyLog: (log: Omit<DailyLog, 'id'>) => void
@@ -45,7 +48,10 @@ interface DentState {
   updateProfile: (p: Partial<Profile>) => void
   clearUnlockToast: () => void
   setCreds: (c: Partial<DentState['creds']>) => void
-  bumpAiUsage: () => void
+  // Plan gates — return false when the current tier's limit is reached.
+  tryUseAI: () => boolean
+  aiLeftThisWeek: () => number
+  manualEventsThisMonth: () => number
 }
 
 function computeStreak(events: ShipEvent[], logs: DailyLog[]): { current: number; longest: number } {
@@ -145,6 +151,8 @@ export const useDent = create<DentState>()(
       seeded: true,
       creds: {},
       aiUsed: 0,
+      aiWeek: weekKey(),
+      aiWeekCount: 0,
 
       // Demo door: keeps the seeded showcase data
       login: () => { track('demo_login'); set({ loggedIn: true }) },
@@ -248,10 +256,17 @@ export const useDent = create<DentState>()(
       },
 
       addEvent: (e) => {
+        const s0 = get()
+        const source = e.source ?? 'manual'
+        // Manual logging is capped on Free; GitHub/other imports are exempt.
+        if (source === 'manual') {
+          const cap = entitlementsFor(s0.profile).manualEventsPerMonth
+          if (get().manualEventsThisMonth() >= cap) return false
+        }
         const now = new Date()
         const ev: ShipEvent = {
           id: `ev_${now.getTime()}`,
-          source: e.source ?? 'manual',
+          source,
           category: e.category,
           title: e.title,
           description: e.description,
@@ -275,6 +290,7 @@ export const useDent = create<DentState>()(
         track('ship_logged', { category: ev.category })
         set({ events, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
         if (s.userId) pushEvent(s.userId, ev)
+        return true
       },
 
       // Bulk import from a real integration (GitHub sync). Events arrive with
@@ -352,9 +368,27 @@ export const useDent = create<DentState>()(
       },
       clearUnlockToast: () => set({ justUnlocked: null }),
       setCreds: (c) => set(s => ({ creds: { ...s.creds, ...c } })),
-      bumpAiUsage: () => {
+
+      // Charge one AI generation against the weekly allowance. Paid tiers are
+      // unlimited (Infinity). Returns false when a Free user is out for the week.
+      tryUseAI: () => {
+        const s = get()
+        const wk = weekKey()
+        const used = s.aiWeek === wk ? s.aiWeekCount : 0
+        const limit = entitlementsFor(s.profile).aiPerWeek
+        if (used >= limit) return false
         track('ai_generated')
-        set(s => ({ aiUsed: s.aiUsed + 1 }))
+        set({ aiWeek: wk, aiWeekCount: used + 1, aiUsed: s.aiUsed + 1 })
+        return true
+      },
+      aiLeftThisWeek: () => {
+        const s = get()
+        const used = s.aiWeek === weekKey() ? s.aiWeekCount : 0
+        return Math.max(0, entitlementsFor(s.profile).aiPerWeek - used)
+      },
+      manualEventsThisMonth: () => {
+        const mk = monthKey()
+        return get().events.filter(e => e.source === 'manual' && e.eventDate.slice(0, 7) === mk).length
       },
     }),
     { name: 'shiplog-v1' }

@@ -101,6 +101,7 @@ export default function Today() {
   const [shipKind, setShipKind] = useState<string | null>(null)
   const [cheer, setCheer] = useState<string | null>(null)
 
+  const [capHit, setCapHit] = useState(false)
   const quickShip = () => {
     if (!quickTitle.trim()) return
     const parts: string[] = []
@@ -108,7 +109,8 @@ export default function Today() {
     if (shipKind) parts.push(`Belongs to: ${shipKind}`)
     if (effort) parts.push(`Effort: ${effort}`)
     if (link.trim()) parts.push(`Link: ${link.trim()}`)
-    addEvent({ title: quickTitle.trim(), category: quickCat, description: parts.join('\n') || undefined })
+    const ok = addEvent({ title: quickTitle.trim(), category: quickCat, description: parts.join('\n') || undefined })
+    if (!ok) { setCapHit(true); return }
     setQuickTitle(''); setNote(''); setLink(''); setEffort(null); setShipKind(null)
     setCheer(SHIP_CHEERS[Math.floor(Math.random() * SHIP_CHEERS.length)])
     setTimeout(() => setCheer(null), 2200)
@@ -392,6 +394,20 @@ export default function Today() {
               )}
             </AnimatePresence>
           </div>
+
+          {/* Free-plan monthly cap reached */}
+          <AnimatePresence>
+            {capHit && (
+              <motion.button
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                onClick={() => navigate('/pricing')}
+                className="mt-2.5 flex w-full items-center gap-2.5 overflow-hidden rounded-xl border border-warning/40 bg-warning/[0.08] px-3.5 py-2.5 text-left text-xs"
+              >
+                <span className="text-secondary">Free plan logs 30 ships a month, and you've hit it. Your GitHub commits still sync — manual logging unlocks with Pro.</span>
+                <span className="ml-auto shrink-0 font-semibold text-warning">Go Pro →</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
 
           {/* Inline details — everything the modal had, right here */}
           <AnimatePresence initial={false}>

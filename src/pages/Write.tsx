@@ -5,6 +5,7 @@ import { subDays, format } from 'date-fns'
 import { Sparkles, Copy, Save, Check, ChevronDown, Wand2, Lock, Atom, ExternalLink } from 'lucide-react'
 import { useDent } from '../lib/store'
 import { generateContent, humanize, fuse, composeUrl } from '../lib/ai'
+import { entitlementsFor, platformAllowed } from '../lib/plan'
 import { TONE_META, type ContentPlatform, type Tone } from '../lib/types'
 import { Page, CategoryPill, SectionTitle } from '../components/ui'
 
@@ -71,10 +72,27 @@ export default function Write() {
     }
   }
 
-  const bumpAiUsage = useDent(s => s.bumpAiUsage)
+  const tryUseAI = useDent(s => s.tryUseAI)
+  const aiLeft = useDent(s => s.aiLeftThisWeek())
+  const ent = entitlementsFor(profile)
+  const [gate, setGate] = useState<string | null>(null)
+
   const generate = async () => {
+    // Feature gates before we spend an AI call.
+    if (mode === 'manual' && !ent.humanWriter) {
+      setGate('The Raw notes → Human writer is a Pro feature. Upgrade to unlock it.')
+      return
+    }
+    if (!platformAllowed(platform, profile)) {
+      setGate(`${PLATFORMS.find(p => p.key === platform)?.label} is a CEO Mode output. Upgrade to publish there.`)
+      return
+    }
+    if (!tryUseAI()) {
+      setGate("You've used your 2 free AI generations this week. Go Pro for unlimited.")
+      return
+    }
+    setGate(null)
     setGenerating(true)
-    bumpAiUsage()
     const text = mode === 'manual'
       ? await humanize(raw, platform, tone, profile.projectName)
       : mode === 'fusion'
@@ -284,6 +302,29 @@ export default function Write() {
             {mode === 'manual' ? <Wand2 size={15} className={generating ? 'animate-pulse' : ''} /> : mode === 'fusion' ? <Atom size={15} className={generating ? 'animate-spin' : ''} /> : <Sparkles size={15} className={generating ? 'animate-pulse' : ''} />}
             {generating ? 'Writing…' : mode === 'manual' ? 'Make it human' : mode === 'fusion' ? `Fuse ${picked.size ? `${picked.size} ${picked.size === 1 ? 'ship' : 'ships'}` : 'ships'} + my state` : 'Generate ✨'}
           </motion.button>
+
+          {/* Free-tier AI allowance + upgrade gate */}
+          {Number.isFinite(aiLeft) && (
+            <div className="mt-2 text-center text-[11px] text-muted">
+              {aiLeft > 0
+                ? <>{aiLeft} free AI {aiLeft === 1 ? 'generation' : 'generations'} left this week · <Link to="/pricing" className="text-accent hover:underline">go unlimited</Link></>
+                : <>Out of free AI this week · <Link to="/pricing" className="font-semibold text-accent hover:underline">upgrade for unlimited →</Link></>}
+            </div>
+          )}
+          <AnimatePresence>
+            {gate && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-2.5 flex items-center gap-2.5 rounded-xl border border-warning/40 bg-warning/[0.08] px-3.5 py-2.5 text-xs">
+                  <Lock size={13} className="shrink-0 text-warning" />
+                  <span className="text-secondary">{gate}</span>
+                  <Link to="/pricing" className="ml-auto shrink-0 font-semibold text-warning hover:underline">See plans →</Link>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <textarea
             value={body}

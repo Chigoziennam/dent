@@ -33,10 +33,12 @@ export default function Week() {
   const draftKey = `${tab}-${tone}`
   const draft = drafts[draftKey]
 
-  const bumpAiUsage = useDent(s => s.bumpAiUsage)
+  const tryUseAI = useDent(s => s.tryUseAI)
+  const [gate, setGate] = useState(false)
   const generate = async () => {
+    if (!tryUseAI()) { setGate(true); return }
+    setGate(false)
     setGenerating(true)
-    bumpAiUsage()
     const text = await generateContent({
       events: weekEvents, dailyLogs: weekLogs, platform: tab, tone,
       projectName: profile.projectName, projectTagline: profile.projectTagline,
@@ -245,6 +247,20 @@ export default function Week() {
             <ActionBtn onClick={openInWriter} icon={Send} label="Open in Writer" disabled={!draft} />
             <ActionBtn onClick={publish} icon={Send} label="Publish to Changelog" disabled={!draft} />
           </div>
+          <AnimatePresence>
+            {gate && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <button onClick={() => navigate('/pricing')}
+                  className="mt-3 flex w-full items-center gap-2.5 rounded-xl border border-warning/40 bg-warning/[0.08] px-3.5 py-2.5 text-left text-xs">
+                  <span className="text-secondary">You've used your 2 free AI generations this week.</span>
+                  <span className="ml-auto shrink-0 font-semibold text-warning">Go Pro for unlimited →</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </GlassCard>
       </motion.div>
     </Page>

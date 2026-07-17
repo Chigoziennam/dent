@@ -4,14 +4,15 @@ import { useNavigate } from 'react-router-dom'
 import { LogOut, ExternalLink, Check, Download, Zap } from 'lucide-react'
 import { supabaseReady } from '../lib/supabase'
 
-const AI_LIMIT = 500 // ≈ $9 of usage on Sonnet-class models
 import { Link } from 'react-router-dom'
 import { useDent } from '../lib/store'
+import { entitlementsFor, tierOf } from '../lib/plan'
 import { TONE_META, type Tone } from '../lib/types'
 import { Page, GlassCard, SectionTitle, AnimatedAvatar } from '../components/ui'
 
 export default function Settings() {
-  const { profile, updateProfile, logout, aiUsed } = useDent()
+  const { profile, updateProfile, logout } = useDent()
+  const aiLeft = useDent(s => s.aiLeftThisWeek())
   const [form, setForm] = useState(profile)
   const [saved, setSaved] = useState(false)
   const [creditToast, setCreditToast] = useState(false)
@@ -145,23 +146,35 @@ export default function Settings() {
             {(profile.tier ?? 'free') === 'free' ? 'Free plan' : profile.tier === 'team' ? 'CEO Mode' : 'Pro'}
           </span>
         </div>
-        <div className="flex items-baseline justify-between">
-          <span className="text-xs text-secondary">AI generations this month</span>
-          <span className="font-mono text-xs text-primary">{aiUsed} / {AI_LIMIT}</span>
-        </div>
-        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/5">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{
-              width: `${Math.min(100, (aiUsed / AI_LIMIT) * 100)}%`,
-              background: aiUsed / AI_LIMIT > 0.85 ? '#f59e0b' : '#6366f1',
-            }}
-          />
-        </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-muted">
-          Every plan includes $9 of AI usage a month — roughly {AI_LIMIT} generations. Past that, top up with
-          credits instead of jumping plans. Unused credits roll over.
-        </p>
+        {tierOf(profile) === 'free' ? (
+          <>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-secondary">Free AI generations left this week</span>
+              <span className="font-mono text-xs text-primary">{aiLeft} / {entitlementsFor(profile).aiPerWeek}</span>
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/5">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.min(100, (aiLeft / entitlementsFor(profile).aiPerWeek) * 100)}%`,
+                  background: aiLeft === 0 ? '#f59e0b' : '#6366f1',
+                }}
+              />
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-muted">
+              The Free plan includes 2 AI generations a week and logs 30 ships a month. GitHub commit sync is
+              always on. <Link to="/pricing" className="font-semibold text-accent hover:underline">Go Pro</Link> for
+              unlimited AI, unlimited logging and the Raw-notes→Human writer.
+            </p>
+          </>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/[0.06] px-3 py-2.5">
+            <Zap size={14} className="text-accent" />
+            <span className="text-xs text-secondary">
+              <span className="font-semibold text-primary">Unlimited AI generations</span> — {tierOf(profile) === 'team' ? 'CEO Mode' : 'Pro'} is active. Thanks for shipping with us.
+            </span>
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           {[
             { label: '+100 credits', price: '$3' },

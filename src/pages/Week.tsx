@@ -224,7 +224,7 @@ export default function Week() {
             {generating ? (
               <div className="flex items-center gap-2 text-sm text-muted">
                 <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity }}>
-                  ✨ Dent AI is writing from your {weekEvents.length} events…
+                  ✨ Super Dent X AI is writing from your {weekEvents.length} events…
                 </motion.span>
               </div>
             ) : draft ? (

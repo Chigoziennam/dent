@@ -46,7 +46,7 @@ const PROMPTS = [
   },
 ]
 
-const QUICK_CATS: EventCategory[] = ['commit', 'feature', 'bugfix', 'deployment', 'learning', 'idea']
+const QUICK_CATS: EventCategory[] = ['commit', 'feature', 'bugfix', 'deployment', 'revenue', 'customer', 'milestone', 'learning', 'idea']
 
 // Each category asks its own question — a conversation, not a form
 const CAT_PROMPTS: Partial<Record<EventCategory, string>> = {
@@ -54,9 +54,16 @@ const CAT_PROMPTS: Partial<Record<EventCategory, string>> = {
   feature: 'What can users do now that they couldn’t this morning?',
   bugfix: 'Which bug did you finally kill?',
   deployment: 'What did you just deploy — and where?',
+  revenue: 'Money landed! How much, from where? First payout? Log the number.',
+  customer: 'Who just became a customer — and what did they say?',
+  milestone: 'What milestone did you just hit? Numbers make it real.',
   learning: 'What did you just learn the hard way?',
   idea: 'What idea just hit you? Trap it before it escapes.',
 }
+
+// Money and milestone ships deserve the full story — the details drawer
+// opens itself so the amount, source and proof get captured for the AI.
+const DETAIL_CATS: EventCategory[] = ['revenue', 'customer', 'milestone']
 
 const SHIP_CHEERS = ['Logged. The streak feeds. 🔥', 'Another one in the book.', 'Future-you says thanks.', 'That’s how empires start.', 'The log never forgets.']
 
@@ -85,7 +92,9 @@ export default function Today() {
   // Inline composer — the fastest path from "did a thing" to "logged"
   const [quickTitle, setQuickTitle] = useState('')
   const [quickCat, setQuickCat] = useState<EventCategory>('commit')
-  const [detailsOpen, setDetailsOpen] = useState(false)
+  // Open by default — the note/proof/effort fields ARE the log's memory,
+  // and the AI answers are only as detailed as what lands here.
+  const [detailsOpen, setDetailsOpen] = useState(true)
   const [note, setNote] = useState('')
   const [link, setLink] = useState('')
   const [effort, setEffort] = useState<string | null>(null)
@@ -98,7 +107,7 @@ export default function Today() {
     if (effort) parts.push(`Effort: ${effort}`)
     if (link.trim()) parts.push(`Link: ${link.trim()}`)
     addEvent({ title: quickTitle.trim(), category: quickCat, description: parts.join('\n') || undefined })
-    setQuickTitle(''); setNote(''); setLink(''); setEffort(null); setDetailsOpen(false)
+    setQuickTitle(''); setNote(''); setLink(''); setEffort(null)
     setCheer(SHIP_CHEERS[Math.floor(Math.random() * SHIP_CHEERS.length)])
     setTimeout(() => setCheer(null), 2200)
   }
@@ -316,7 +325,7 @@ export default function Today() {
           </div>
           <div className="flex flex-wrap gap-1.5">
             {QUICK_CATS.map(c => (
-              <button key={c} onClick={() => setQuickCat(c)}
+              <button key={c} onClick={() => { setQuickCat(c); if (DETAIL_CATS.includes(c)) setDetailsOpen(true) }}
                 className="rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all"
                 style={quickCat === c
                   ? { color: CATEGORY_META[c].color, background: CATEGORY_META[c].bg, borderColor: CATEGORY_META[c].color }
@@ -393,7 +402,9 @@ export default function Today() {
                     value={note}
                     onChange={e => setNote(e.target.value)}
                     rows={2}
-                    placeholder="The story behind it — what changed, why it matters (optional)"
+                    placeholder={DETAIL_CATS.includes(quickCat)
+                      ? 'The details the AI will quote back — amount, who paid, which plan, how it felt.'
+                      : 'The story behind it — what changed, why it matters (optional)'}
                     className="w-full resize-none rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted"
                   />
                   <input

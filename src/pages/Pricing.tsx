@@ -134,7 +134,7 @@ export default function Pricing() {
       <div className="pointer-events-none fixed inset-0"><SpaceBackdrop /></div>
       <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
         <Link to="/" className="flex items-center gap-2.5">
-          <Logo size={30} /><span className="font-bold tracking-tight">Dent</span>
+          <Logo size={30} /><span className="font-bold tracking-tight">Super Dent X</span>
         </Link>
         <Link to="/login" className="rounded-lg border border-line px-3.5 py-1.5 text-[13px] font-medium text-secondary hover:border-line-hover hover:text-primary">
           Sign in

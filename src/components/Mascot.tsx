@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 
-// The Dent companion: a parrot keeps you company by day,
+// The Super Dent X companion: a parrot keeps you company by day,
 // a night owl takes the late shift. Both perch on builder blocks.
 export function Mascot({ size = 92 }: { size?: number }) {
   const hour = new Date().getHours()
@@ -25,7 +25,7 @@ function Parrot({ size }: { size: number }) {
       width={size} height={size} viewBox="0 0 110 130" fill="none"
       animate={{ y: [0, -3, 0] }}
       transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
-      aria-label="Dent parrot companion"
+      aria-label="Super Dent X parrot companion"
     >
       <Blocks />
       {/* tail */}
@@ -72,7 +72,7 @@ function Owl({ size }: { size: number }) {
       width={size} height={size} viewBox="0 0 110 130" fill="none"
       animate={{ y: [0, -2.5, 0] }}
       transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
-      aria-label="Dent night owl companion"
+      aria-label="Super Dent X night owl companion"
     >
       {/* moon */}
       <circle cx="90" cy="18" r="9" fill="#fcd34d" opacity="0.25" />

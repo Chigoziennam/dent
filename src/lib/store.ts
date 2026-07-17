@@ -90,7 +90,7 @@ function buildInitial() {
     username: 'chigozie',
     displayName: 'Chigozie',
     bio: 'Founder at Nalto. Building tools for African schools and founders who ship.',
-    projectName: 'Dent',
+    projectName: 'Super Dent X',
     projectTagline: 'Build in Public. Without Thinking About It.',
     website: 'https://lumenai.sbs',
     twitter: 'NaltoHQ',

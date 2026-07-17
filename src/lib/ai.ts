@@ -30,7 +30,7 @@ async function callN8n(task: string, payload: Record<string, unknown>): Promise<
   }
 }
 
-const SYSTEM_PROMPT = `You are Dent AI, an assistant for founders who build in public.
+const SYSTEM_PROMPT = `You are Super Dent X AI, an assistant for founders who build in public.
 Rules:
 - Sound like a real founder, not a marketer or AI
 - Be specific — use actual event data, not generic platitudes
@@ -51,8 +51,10 @@ interface GenParams {
 export async function generateContent(p: GenParams): Promise<string> {
   const alive = await callN8n('generate', {
     platform: p.platform, tone: p.tone, projectName: p.projectName, projectTagline: p.projectTagline,
-    events: p.events.map(e => ({ category: e.category, title: e.title, date: e.eventDate })),
-    dailyLogs: p.dailyLogs.map(l => ({ date: l.logDate, built: l.whatIBuilt, learned: l.whatILearned })),
+    // detail carries the note/proof/effort the builder typed — this is what
+    // turns "generic AI post" into receipts with real numbers.
+    events: p.events.map(e => ({ category: e.category, title: e.title, date: e.eventDate, detail: e.description?.slice(0, 240) })),
+    dailyLogs: p.dailyLogs.map(l => ({ date: l.logDate, built: l.whatIBuilt, learned: l.whatILearned, blocked: l.whatBlockedMe, energy: l.energyLevel })),
   })
   if (alive) return alive
   if (API_KEY) {
@@ -74,7 +76,7 @@ export async function generateContent(p: GenParams): Promise<string> {
             content: `Project: ${p.projectName} — ${p.projectTagline}
 
 Events this period:
-${p.events.map(e => `- [${e.category}] ${e.title} (${e.eventDate})`).join('\n')}
+${p.events.map(e => `- [${e.category}] ${e.title} (${e.eventDate})${e.description ? ` — ${e.description.slice(0, 160).replace(/\n/g, '; ')}` : ''}`).join('\n')}
 
 Daily reflections:
 ${p.dailyLogs.map(l => `${l.logDate}: Built: ${l.whatIBuilt}. Learned: ${l.whatILearned}`).join('\n')}
@@ -235,7 +237,7 @@ export async function fuse(params: {
   const { picked, state, platform, tone, projectName } = params
   const alive = await callN8n('fuse', {
     state, platform, tone, projectName,
-    picked: picked.map(e => ({ category: e.category, title: e.title, date: e.eventDate })),
+    picked: picked.map(e => ({ category: e.category, title: e.title, date: e.eventDate, detail: e.description?.slice(0, 240) })),
   })
   if (alive) return alive
   if (API_KEY) {
@@ -342,8 +344,8 @@ async function copilotRemote(question: string, ctx: CopilotContext): Promise<str
     question,
     projectName: ctx.projectName,
     streak: ctx.streak,
-    events: ctx.events.slice(0, 60).map(e => ({ category: e.category, title: e.title, date: e.eventDate })),
-    dailyLogs: ctx.dailyLogs.slice(0, 14).map(l => ({ date: l.logDate, built: l.whatIBuilt, learned: l.whatILearned, mood: l.mood })),
+    events: ctx.events.slice(0, 60).map(e => ({ category: e.category, title: e.title, date: e.eventDate, detail: e.description?.slice(0, 240) })),
+    dailyLogs: ctx.dailyLogs.slice(0, 14).map(l => ({ date: l.logDate, built: l.whatIBuilt, learned: l.whatILearned, blocked: l.whatBlockedMe, mood: l.mood, energy: l.energyLevel })),
   })
   if (alive) return alive
   // Direct Claude fallback: real AI the moment VITE_ANTHROPIC_API_KEY exists.
@@ -361,10 +363,10 @@ async function copilotRemote(question: string, ctx: CopilotContext): Promise<str
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 400,
-          system: `You are the Dent Co-pilot for ${ctx.displayName}, a founder building ${ctx.projectName}. You have their full shipping log. Be a real companion: specific, warm, brief (2-4 sentences), reference their actual events by name and date. Motivate with receipts, never generic hype. If asked "when did I X", answer from the events list.`,
+          system: `You are the Super Dent X Co-pilot for ${ctx.displayName}, a founder building ${ctx.projectName}. You have their full shipping log. Be a real companion: specific, warm, brief (2-4 sentences), reference their actual events by name and date. Motivate with receipts, never generic hype. If asked "when did I X", answer from the events list.`,
           messages: [{
             role: 'user',
-            content: `My streak: ${ctx.streak} days.\nMy recent events:\n${ctx.events.slice(0, 60).map(e => `- ${e.eventDate} [${e.category}] ${e.title}`).join('\n')}\n\nRecent reflections:\n${ctx.dailyLogs.slice(0, 10).map(l => `${l.logDate}: built ${l.whatIBuilt}; learned ${l.whatILearned}`).join('\n')}\n\nMy question: ${question}`,
+            content: `My streak: ${ctx.streak} days.\nMy recent events:\n${ctx.events.slice(0, 60).map(e => `- ${e.eventDate} [${e.category}] ${e.title}${e.description ? ` — ${e.description.slice(0, 160).replace(/\n/g, '; ')}` : ''}`).join('\n')}\n\nRecent reflections:\n${ctx.dailyLogs.slice(0, 10).map(l => `${l.logDate}: built ${l.whatIBuilt}; learned ${l.whatILearned}`).join('\n')}\n\nMy question: ${question}`,
           }],
         }),
       })
@@ -424,7 +426,7 @@ function localAnswer(question: string, ctx: CopilotContext): string {
   const searchMatch = q.match(/(?:when did i|find|search|did i)\s+(.+)/)
   if (searchMatch) {
     const terms = searchMatch[1].replace(/[?.!]/g, '').split(/\s+/).filter(w => w.length > 2)
-    const hits = ctx.events.filter(e => terms.some(t => e.title.toLowerCase().includes(t))).slice(0, 4)
+    const hits = ctx.events.filter(e => terms.some(t => e.title.toLowerCase().includes(t) || e.description?.toLowerCase().includes(t))).slice(0, 4)
     if (hits.length === 0) return `I searched the whole log — nothing matching "${terms.join(' ')}" yet. When you ship it, I'll remember it.`
     return `Found it in the log:\n${hits.map(h => `• ${h.eventDate} — ${h.title}`).join('\n')}`
   }

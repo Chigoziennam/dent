@@ -46,7 +46,7 @@ const CUSTOMERS = [
   '3 new waitlist signups', 'Demo call booked with second school',
 ]
 const MILESTONES = [
-  'Crossed 100 total commits on Dent', '21-day shipping streak',
+  'Crossed 100 total commits on Super Dent X', '21-day shipping streak',
   'First external user logged an event', 'Landing page hit 1,000 visits',
 ]
 const LEARNINGS = [

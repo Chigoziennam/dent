@@ -2,7 +2,7 @@
   "name": "nalto-dent",
   "private": true,
   "version": "0.1.0",
-  "description": "Dent by Nalto — Build in Public. Without Thinking About It.",
+  "description": "Nalto Super Dent X — Build in Public. Without Thinking About It.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,6 +14,7 @@
     "@fontsource-variable/inter": "^5.1.0",
     "@fontsource/jetbrains-mono": "^5.1.0",
     "@fontsource/space-grotesk": "^5.2.10",
+    "@supabase/supabase-js": "^2.110.7",
     "date-fns": "^3.6.0",
     "framer-motion": "^11.3.0",
     "html2pdf.js": "^0.14.0",

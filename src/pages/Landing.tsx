@@ -14,7 +14,7 @@ export default function Landing() {
       <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
         <div className="flex items-center gap-2.5">
           <Logo size={30} />
-          <span className="font-bold tracking-tight">Dent</span>
+          <span className="font-bold tracking-tight">Super Dent X</span>
           <span className="rounded-full border border-line px-2 py-0.5 text-[10px] font-medium text-muted">by Nalto</span>
         </div>
         <div className="flex items-center gap-2">
@@ -105,7 +105,7 @@ export default function Landing() {
               <img src="/avatars/notionists-kernel.svg" alt="" className="h-14 w-14 rounded-2xl border border-line" />
               <div>
                 <div className="font-bold">Chigozie</div>
-                <div className="text-xs text-muted">@chigozie · building Dent</div>
+                <div className="text-xs text-muted">@chigozie · building Super Dent X</div>
               </div>
               <div className="streak-gradient ml-auto rounded-full px-3 py-1 text-xs font-bold text-white">🔥 21</div>
             </div>
@@ -215,8 +215,8 @@ export default function Landing() {
 
       <footer className="relative z-10 border-t border-line px-5 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-xs text-muted sm:flex-row">
-          <div className="flex items-center gap-2"><Logo size={18} /> Nalto · Dent</div>
-          <div>Built with Dent · Powered by Nalto</div>
+          <div className="flex items-center gap-2"><Logo size={18} /> Nalto · Super Dent X</div>
+          <div>Built with Super Dent X · Powered by Nalto</div>
         </div>
       </footer>
     </div>
@@ -235,7 +235,7 @@ const FEATURES = [
 // ── Animated terminal: the product pitch in 6 lines ──────────────
 const TERM_LINES = [
   { text: '$ git push origin main', color: '#f0f0f5' },
-  { text: '✓ 3 commits captured by Dent', color: '#22c55e' },
+  { text: '✓ 3 commits captured by Super Dent X', color: '#22c55e' },
   { text: '✓ vercel deploy detected — production', color: '#22c55e' },
   { text: '✓ stripe: new customer event logged', color: '#22c55e' },
   { text: '✨ Friday thread drafted from 34 ships', color: '#a5b4fc' },

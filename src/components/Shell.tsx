@@ -57,7 +57,7 @@ export default function Shell() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const pageTitle = [...NAV, ...NAV2].find(n => location.pathname.startsWith(n.to))?.label ?? 'Dent'
+  const pageTitle = [...NAV, ...NAV2].find(n => location.pathname.startsWith(n.to))?.label ?? 'Super Dent X'
 
   return (
     <div className="flex min-h-dvh bg-base">
@@ -73,7 +73,7 @@ export default function Shell() {
       >
         <div className="flex items-center gap-2.5 px-4 pt-5 pb-2">
           <button onClick={() => navigate('/app/today')} className="shrink-0"><Logo size={30} /></button>
-          {!collapsed && <span className="text-[15px] font-bold tracking-tight">Dent</span>}
+          {!collapsed && <span className="text-[15px] font-bold tracking-tight">Super Dent X</span>}
           <button
             onClick={() => setCollapsed(c => !c)}
             className="ml-auto rounded-md p-1 text-muted hover:bg-white/5 hover:text-secondary"

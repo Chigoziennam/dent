@@ -162,7 +162,7 @@ export default function Settings() {
               />
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              The Free plan includes 2 AI generations a week and logs 30 ships a month. GitHub commit sync is
+              The Free plan includes {entitlementsFor(profile).aiPerWeek} AI generations a week and logs 30 ships a month. GitHub commit sync is
               always on. <Link to="/pricing" className="font-semibold text-accent hover:underline">Go Pro</Link> for
               unlimited AI, unlimited logging and the Raw-notes→Human writer.
             </p>

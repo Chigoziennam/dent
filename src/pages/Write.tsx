@@ -88,7 +88,7 @@ export default function Write() {
       return
     }
     if (!tryUseAI()) {
-      setGate("You've used your 2 free AI generations this week. Go Pro for unlimited.")
+      setGate(`You've used all ${ent.aiPerWeek} free AI generations this week. Go Pro for unlimited.`)
       return
     }
     setGate(null)

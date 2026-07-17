@@ -5,6 +5,7 @@ import { format, startOfWeek, addDays, parseISO } from 'date-fns'
 import { Copy, RefreshCw, Send, Check, ExternalLink, Trophy } from 'lucide-react'
 import { useDent, todayStr } from '../lib/store'
 import { generateContent, composeUrl } from '../lib/ai'
+import { ENTITLEMENTS } from '../lib/plan'
 import { TONE_META, CATEGORY_META, type ContentPlatform, type Tone, type EventCategory } from '../lib/types'
 import { Page, GlassCard, CountUp, CategoryPill, SectionTitle, stagger } from '../components/ui'
 import { Typewriter } from '../components/Typewriter'
@@ -255,7 +256,7 @@ export default function Week() {
               >
                 <button onClick={() => navigate('/pricing')}
                   className="mt-3 flex w-full items-center gap-2.5 rounded-xl border border-warning/40 bg-warning/[0.08] px-3.5 py-2.5 text-left text-xs">
-                  <span className="text-secondary">You've used your 2 free AI generations this week.</span>
+                  <span className="text-secondary">You've used all {ENTITLEMENTS.free.aiPerWeek} free AI generations this week.</span>
                   <span className="ml-auto shrink-0 font-semibold text-warning">Go Pro for unlimited →</span>
                 </button>
               </motion.div>

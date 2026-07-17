@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Check, ArrowLeft, Crown } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Check, ArrowLeft, Crown, X, ShieldCheck } from 'lucide-react'
 import { SpaceBackdrop, Logo } from '../components/ui'
 import { useDent } from '../lib/store'
 import { track } from '../lib/telemetry'
@@ -50,7 +50,7 @@ const TIERS = [
     features: [
       '30 events / month',
       '1 integration (GitHub)',
-      '2 AI generations / week',
+      '7 AI generations / week',
       'Public profile & changelog',
       'Streaks & achievements',
     ],
@@ -90,44 +90,72 @@ const TIERS = [
   },
 ]
 
+// The exact charge for a tier. Yearly bills 12× the per-month rate, once.
+function quote(tierName: string, currency: Currency, yearly: boolean) {
+  const perMonthNgn = PRICES[tierName]?.NGN[yearly ? 'y' : 'm'] ?? 0
+  const perMonthUsd = PRICES[tierName]?.USD[yearly ? 'y' : 'm'] ?? 0
+  return {
+    tier: tierName,
+    cycle: (yearly ? 'yearly' : 'monthly') as 'yearly' | 'monthly',
+    perMonthNgn, perMonthUsd,
+    chargeNgn: yearly ? perMonthNgn * 12 : perMonthNgn,
+    chargeUsd: yearly ? perMonthUsd * 12 : perMonthUsd,
+    currency,
+  }
+}
+type Quote = ReturnType<typeof quote>
+
 export default function Pricing() {
   const [yearly, setYearly] = useState(false)
   const [currency, setCurrency] = useState<Currency>(detectCurrency())
   const [payMsg, setPayMsg] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState<Quote | null>(null)
+  const [email, setEmail] = useState('')
+  const [emailErr, setEmailErr] = useState(false)
+  const [paying, setPaying] = useState(false)
   const { updateProfile } = useDent()
 
   useEffect(() => { track('plan_viewed', { currency }) }, [currency])
 
-  // Real checkout — key is hardwired, money settles to the founder's account
-  const checkout = async (tierName: string) => {
-    const amount = PRICES[tierName]?.[currency][yearly ? 'y' : 'm'] ?? 0
-    if (amount === 0) return
-    if (currency !== 'NGN' || !paystackReady()) {
-      setPayMsg('Card payments go live at launch — Nigerian builders pay in naira via Paystack.')
+  // Step 1 — open the confirmation with the EXACT amount, before any charge.
+  const openConfirm = (tierName: string) => {
+    const q = quote(tierName, currency, yearly)
+    if (q.chargeNgn === 0) return
+    if (!paystackReady()) {
+      setPayMsg('Payments are being set up — please check back shortly.')
       setTimeout(() => setPayMsg(null), 3000)
       return
     }
-    const email = window.prompt('Email for your receipt:')
-    if (!email?.includes('@')) return
+    setEmail(''); setEmailErr(false)
+    setConfirm(q)
+  }
+
+  // Step 2 — only after the user confirms the exact amount do we charge.
+  const pay = async () => {
+    if (!confirm) return
+    if (!email.includes('@')) { setEmailErr(true); return }
+    setPaying(true)
     await loadPaystack()
     const Pop = (window as unknown as { PaystackPop: new () => { newTransaction: (o: Record<string, unknown>) => void } }).PaystackPop
-    const cycle = yearly ? 'yearly' : 'monthly'
+    // Paystack settles in NGN; that exact naira figure is what we showed and
+    // confirmed. International cards are charged the naira amount by their bank.
     new Pop().newTransaction({
       key: PAYSTACK_PUBLIC_KEY,
       email,
-      amount: amount * 100, // kobo
+      amount: confirm.chargeNgn * 100, // kobo
       currency: 'NGN',
-      metadata: { tier: tierName, cycle },
+      metadata: { tier: confirm.tier, cycle: confirm.cycle },
       onSuccess: (tx: { reference?: string }) => {
-        updateProfile({ tier: tierName === 'CEO Mode' ? 'team' : 'pro' })
-        // Lands in the Supabase `payments` table — visible in your dashboard
-        // instantly; the n8n confirmer verifies it with the secret key after.
-        recordPayment({ email, amountKobo: amount * 100, tier: tierName, cycle, reference: tx?.reference })
-        track('payment_success', { tier: tierName, cycle })
-        setPayMsg('Payment received — welcome aboard! Your plan is active. 🎉')
+        // Activate EXACTLY the plan they paid for, and sync the tier to cloud.
+        updateProfile({ tier: confirm.tier === 'CEO Mode' ? 'team' : 'pro' })
+        recordPayment({ email, amountKobo: confirm.chargeNgn * 100, tier: confirm.tier, cycle: confirm.cycle, reference: tx?.reference })
+        track('payment_success', { tier: confirm.tier, cycle: confirm.cycle })
+        setPaying(false)
+        setConfirm(null)
+        setPayMsg(`Payment confirmed — ${confirm.tier} is now active. 🎉`)
         setTimeout(() => setPayMsg(null), 4000)
       },
-      onCancel: () => {},
+      onCancel: () => { setPaying(false) },
     })
   }
 
@@ -236,10 +264,10 @@ export default function Pricing() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => checkout(t.name)}
+                    onClick={() => openConfirm(t.name)}
                     className={`block w-full rounded-xl py-3 text-center text-sm font-semibold ${t.highlight ? 'sheen bg-accent text-white shadow-[0_0_28px_rgba(99,102,241,0.4)]' : 'border border-line text-secondary transition-colors hover:border-line-hover hover:text-primary'}`}
                   >
-                    {t.cta}{currency === 'NGN' && paystackReady() ? ' · pay with Paystack' : ''}
+                    {t.cta}{paystackReady() ? ' · pay with Paystack' : ''}
                   </button>
                 )}
               </motion.div>
@@ -251,6 +279,70 @@ export default function Pricing() {
           Launch pricing — locked in forever for early builders. Every feature is unlocked for everyone during the beta.
           {currency === 'NGN' && <span className="mt-1 block">Payments in naira via Paystack — no dollar cards needed.</span>}
         </p>
+
+        {/* Confirm the EXACT amount (₦ and $) before anything is charged */}
+        <AnimatePresence>
+          {confirm && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm md:items-center"
+              onClick={() => !paying && setConfirm(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 24 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 12 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                className="glass-strong w-full max-w-sm rounded-t-3xl p-6 md:rounded-2xl"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold tracking-tight">Confirm your plan</h3>
+                  <button onClick={() => !paying && setConfirm(null)} className="rounded-lg p-1.5 text-muted hover:bg-white/5"><X size={16} /></button>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-accent/30 bg-accent/[0.06] p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-primary">{confirm.tier}</span>
+                    <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-secondary">{confirm.cycle}</span>
+                  </div>
+                  {/* Exact charged amount — naira is what Paystack settles */}
+                  <div className="mt-3 flex items-baseline gap-2">
+                    <span className="font-mono text-3xl font-bold text-primary">₦{confirm.chargeNgn.toLocaleString()}</span>
+                    <span className="text-sm text-secondary">≈ ${confirm.chargeUsd.toLocaleString()}</span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted">
+                    {confirm.cycle === 'yearly'
+                      ? `Billed once for the year — ₦${confirm.perMonthNgn.toLocaleString()}/mo × 12 (≈ $${confirm.perMonthUsd.toLocaleString()}/mo).`
+                      : `Billed monthly — ₦${confirm.perMonthNgn.toLocaleString()} (≈ $${confirm.perMonthUsd.toLocaleString()}) each month.`}
+                  </div>
+                </div>
+
+                <label className="mt-4 block">
+                  <span className="mb-1 block text-xs font-medium text-secondary">Email for your receipt & account</span>
+                  <input
+                    type="email" value={email}
+                    onChange={e => { setEmail(e.target.value); setEmailErr(false) }}
+                    placeholder="you@buildsthings.com"
+                    className={`w-full rounded-xl border bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted ${emailErr ? 'border-red-400/60' : 'border-line'}`}
+                  />
+                  {emailErr && <span className="mt-1 block text-[11px] text-red-400">Enter a valid email so we can activate your plan.</span>}
+                </label>
+
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={pay}
+                  disabled={paying}
+                  className="sheen mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3 text-sm font-semibold text-white shadow-[0_0_28px_rgba(99,102,241,0.4)] disabled:opacity-60"
+                >
+                  {paying ? 'Opening secure checkout…' : `Confirm & pay ₦${confirm.chargeNgn.toLocaleString()}`}
+                </motion.button>
+                <div className="mt-3 flex items-center justify-center gap-1.5 text-[10.5px] text-muted">
+                  <ShieldCheck size={12} className="text-success" /> Secure checkout by Paystack · charged in naira · international cards welcome
+                </div>
+                <p className="mt-1 text-center text-[10.5px] text-muted">Your plan activates only after payment succeeds.</p>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {payMsg && (
           <motion.div

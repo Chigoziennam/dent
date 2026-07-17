@@ -19,7 +19,9 @@ export interface Entitlements {
 }
 
 export const ENTITLEMENTS: Record<Tier, Entitlements> = {
-  free: { aiPerWeek: 2,        manualEventsPerMonth: 30,       humanWriter: false, proPlatforms: false },
+  // Free gets a generous 7/week on purpose — enough to feel the value and get
+  // hooked before hitting the wall that sells Pro.
+  free: { aiPerWeek: 7,        manualEventsPerMonth: 30,       humanWriter: false, proPlatforms: false },
   pro:  { aiPerWeek: Infinity, manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: false },
   team: { aiPerWeek: Infinity, manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: true  },
 }

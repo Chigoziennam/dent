@@ -1,43 +1,81 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, subDays } from 'date-fns'
-import { Check, Shield, Workflow, Database, Bot, FileDown, KeyRound, ExternalLink } from 'lucide-react'
+import { Check, Shield, Workflow, Database, Bot, FileDown, KeyRound, ExternalLink, RefreshCw, Cloud, AlertCircle } from 'lucide-react'
 import { useDent } from '../lib/store'
 import { CATEGORY_META } from '../lib/types'
+import { supabaseReady } from '../lib/supabase'
+import { verifyGithub, fetchGithubShips, type GithubAccount } from '../lib/github'
 import { Page, SectionTitle } from '../components/ui'
 
 const PIPELINE = [
-  { icon: Workflow, title: 'Capture', text: 'Your tools fire webhooks at n8n workflows on our server. GitHub push → parsed, categorized (feat → feature, fix → bugfix), timestamped.' },
-  { icon: Shield, title: 'Secure', text: 'Your tokens stay on THIS device (localStorage) until cloud sync — then they move to n8n’s encrypted vault. Never in anyone else’s browser.' },
-  { icon: Database, title: 'Store', text: 'Every event lands in Postgres: ship_events, daily_logs, weekly_digests. Your entire building history, queryable forever.' },
-  { icon: Bot, title: 'Companion', text: 'Once a day, the AI reads your recent ships and leaves one short note — motivation with receipts, never spam. Fridays it drafts your content.' },
+  { icon: Workflow, title: 'Capture', text: 'Connect GitHub and Super Dent X reads your real commits and releases — categorized (feat → feature, fix → bugfix, release → deploy) and timestamped into your log.' },
+  { icon: Shield, title: 'Secure', text: 'Your token stays on THIS device (localStorage) and talks straight to GitHub. It is never uploaded, never shared, never in anyone else’s browser.' },
+  { icon: Database, title: 'Store', text: 'Every synced commit becomes a ship event in your timeline — deduped by commit hash, so re-syncing never creates copies. Your whole build history, queryable.' },
+  { icon: Bot, title: 'Write', text: 'Those real commits become the raw material the AI writer turns into posts — receipts, not fluff. A commit + a deploy on the same day become one story.' },
 ]
 
 export default function Integrations() {
-  const { creds, setCreds, events, dailyLogs, profile } = useDent()
-  const [toast, setToast] = useState<string | null>(null)
-  const [ghToken, setGhToken] = useState(creds.githubToken ?? '')
+  const { creds, setCreds, events, dailyLogs, profile, importEvents, userId } = useDent()
+  const [toast, setToast] = useState<{ msg: string; kind: 'ok' | 'err' } | null>(null)
   const [ghUser, setGhUser] = useState(creds.githubUser ?? '')
-  const [sbUrl, setSbUrl] = useState(creds.supabaseUrl ?? '')
-  const [sbAnon, setSbAnon] = useState(creds.supabaseAnon ?? '')
+  const [ghToken, setGhToken] = useState(creds.githubToken ?? '')
+  const [account, setAccount] = useState<GithubAccount | null>(null)
+  const [verifying, setVerifying] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [lastSync, setLastSync] = useState<string | null>(creds.githubLastSync ?? null)
   const [from, setFrom] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'))
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [exporting, setExporting] = useState(false)
 
-  const ghConnected = Boolean(creds.githubToken && creds.githubUser)
-  const sbConnected = Boolean(creds.supabaseUrl && creds.supabaseAnon)
+  const ghConnected = Boolean(creds.githubUser)
+  const notify = (msg: string, kind: 'ok' | 'err' = 'ok') => { setToast({ msg, kind }); setTimeout(() => setToast(null), 3200) }
 
-  const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2600) }
+  // On load, silently re-verify a saved GitHub connection so "Connected" is
+  // always the truth, not a stale flag.
+  useEffect(() => {
+    if (!creds.githubUser) return
+    verifyGithub({ user: creds.githubUser, token: creds.githubToken })
+      .then(setAccount)
+      .catch(() => setAccount(null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const saveGithub = () => {
-    if (!ghToken.trim() || !ghUser.trim()) return
-    setCreds({ githubToken: ghToken.trim(), githubUser: ghUser.trim() })
-    notify('GitHub connected — capture activates with the n8n backend ✓')
+  const connectGithub = async () => {
+    if (!ghUser.trim()) return
+    setVerifying(true)
+    try {
+      const acc = await verifyGithub({ user: ghUser.trim(), token: ghToken.trim() || undefined })
+      setAccount(acc)
+      setCreds({ githubUser: ghUser.trim(), githubToken: ghToken.trim() || undefined })
+      notify(`Connected as @${acc.login} — ${acc.public_repos} public repos. Now hit Sync. ✓`)
+      // Pull straight away so "connected" means something instantly.
+      await runSync(ghUser.trim(), ghToken.trim() || undefined)
+    } catch (e) {
+      setAccount(null)
+      notify((e as Error).message, 'err')
+    } finally {
+      setVerifying(false)
+    }
   }
-  const saveSupabase = () => {
-    if (!sbUrl.trim() || !sbAnon.trim()) return
-    setCreds({ supabaseUrl: sbUrl.trim().replace(/\/rest\/v1\/?$/, ''), supabaseAnon: sbAnon.trim() })
-    notify('Supabase connected — your log can sync to your own database ✓')
+
+  const runSync = async (user = creds.githubUser!, token = creds.githubToken) => {
+    if (!user) return
+    setSyncing(true)
+    try {
+      const ships = await fetchGithubShips({ user, token }, 30)
+      const added = importEvents(ships)
+      const stamp = new Date().toISOString()
+      setLastSync(stamp)
+      setCreds({ githubLastSync: stamp })
+      notify(added > 0
+        ? `Synced ${added} new ${added === 1 ? 'commit' : 'commits'} from GitHub into your log. ✓`
+        : ships.length > 0 ? 'Already up to date — no new commits since last sync.' : 'No commits in the last 30 days on this account.')
+    } catch (e) {
+      notify((e as Error).message, 'err')
+    } finally {
+      setSyncing(false)
+    }
   }
 
   const rangeEvents = useMemo(
@@ -47,7 +85,7 @@ export default function Integrations() {
 
   // PDF: builds a styled report and hands it to html2pdf
   const exportPdf = async () => {
-    if (rangeEvents.length === 0) { notify('No ships in that date range.'); return }
+    if (rangeEvents.length === 0) { notify('No ships in that date range.', 'err'); return }
     setExporting(true)
     const { default: html2pdf } = await import('html2pdf.js')
     const milestones = rangeEvents.filter(e => e.category === 'milestone' || e.isPinned)
@@ -83,64 +121,94 @@ export default function Integrations() {
     notify('PDF downloaded — your proof of work, portable ✓')
   }
 
+  const ghShipCount = useMemo(() => events.filter(e => e.source === 'github').length, [events])
+
   return (
     <Page>
-      <p className="text-sm text-secondary">Three connections. Your credentials never leave this device.</p>
+      <p className="text-sm text-secondary">Connect GitHub and your real commits flow into the log. Your credentials never leave this device.</p>
 
       <motion.div
         initial="initial" animate="animate"
         variants={{ animate: { transition: { staggerChildren: 0.1 } } }}
         className="mt-5 grid gap-4 lg:grid-cols-3"
       >
-        {/* GitHub */}
+        {/* GitHub — the real one */}
         <motion.div variants={{ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }}
-          className="glass p-5" style={ghConnected ? { borderColor: 'rgba(34,197,94,0.4)', boxShadow: '0 0 28px rgba(34,197,94,0.1)' } : undefined}>
+          className="glass p-5" style={account ? { borderColor: 'rgba(34,197,94,0.4)', boxShadow: '0 0 28px rgba(34,197,94,0.1)' } : undefined}>
           <div className="flex items-center justify-between">
             <span className="text-2xl">🐙</span>
-            {ghConnected
+            {account
               ? <span className="flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-[11px] font-semibold text-success"><Check size={11} /> Connected</span>
-              : <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-muted">Not connected</span>}
+              : ghConnected
+                ? <span className="flex items-center gap-1 rounded-full bg-warning/15 px-2.5 py-1 text-[11px] font-semibold text-warning"><AlertCircle size={11} /> Reconnect</span>
+                : <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-muted">Not connected</span>}
           </div>
           <div className="mt-3 font-semibold">GitHub</div>
-          <p className="mt-1 text-xs leading-relaxed text-secondary">Captures commits, PRs and issues the moment you push.</p>
-          <div className="mt-3.5 space-y-2">
-            <input value={ghUser} onChange={e => setGhUser(e.target.value)} placeholder="GitHub username"
-              className="w-full rounded-lg border border-line bg-white/[0.03] px-3 py-2 text-xs placeholder:text-muted" />
-            <input value={ghToken} onChange={e => setGhToken(e.target.value)} type="password" placeholder="Personal access token (ghp_…)"
-              className="w-full rounded-lg border border-line bg-white/[0.03] px-3 py-2 font-mono text-xs placeholder:text-muted" />
-            <motion.button type="button" whileTap={{ scale: 0.97 }} onClick={saveGithub} disabled={!ghToken.trim() || !ghUser.trim()}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent py-2 text-xs font-semibold text-white disabled:opacity-40">
-              <KeyRound size={12} /> {ghConnected ? 'Update credentials' : 'Connect GitHub'}
-            </motion.button>
-            <a href="https://github.com/settings/tokens/new?description=Super Dent X&scopes=repo,read:user" target="_blank" rel="noreferrer"
-              className="flex items-center justify-center gap-1 text-[10.5px] text-muted hover:text-accent">
-              Create a token on GitHub <ExternalLink size={9} />
-            </a>
-          </div>
+
+          {account ? (
+            <div className="mt-2">
+              <div className="flex items-center gap-2.5 rounded-xl border border-line bg-white/[0.02] p-2.5">
+                <img src={account.avatar_url} alt="" className="h-9 w-9 rounded-full" />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-primary">{account.name ?? account.login}</div>
+                  <div className="truncate font-mono text-[11px] text-muted">@{account.login} · {account.public_repos} repos</div>
+                </div>
+              </div>
+              <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted">
+                <span>{ghShipCount} commits in your log</span>
+                {lastSync && <span>synced {format(new Date(lastSync), 'MMM d, HH:mm')}</span>}
+              </div>
+              <motion.button type="button" whileTap={{ scale: 0.97 }} onClick={() => runSync()} disabled={syncing}
+                className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent py-2 text-xs font-semibold text-white disabled:opacity-50">
+                <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Syncing commits…' : 'Sync commits now'}
+              </motion.button>
+              <button type="button" onClick={() => { setAccount(null); setCreds({ githubUser: undefined, githubToken: undefined }); setGhToken('') }}
+                className="mt-1.5 w-full text-center text-[10.5px] text-muted hover:text-secondary">Disconnect</button>
+            </div>
+          ) : (
+            <>
+              <p className="mt-1 text-xs leading-relaxed text-secondary">Reads your real commits & releases straight from GitHub. Username alone works for public repos; a token adds private + higher limits.</p>
+              <div className="mt-3.5 space-y-2">
+                <input value={ghUser} onChange={e => setGhUser(e.target.value)} placeholder="GitHub username (e.g. Chigoziennam)"
+                  className="w-full rounded-lg border border-line bg-white/[0.03] px-3 py-2 text-xs placeholder:text-muted" />
+                <input value={ghToken} onChange={e => setGhToken(e.target.value)} type="password" placeholder="Access token (optional, ghp_…)"
+                  className="w-full rounded-lg border border-line bg-white/[0.03] px-3 py-2 font-mono text-xs placeholder:text-muted" />
+                <motion.button type="button" whileTap={{ scale: 0.97 }} onClick={connectGithub} disabled={!ghUser.trim() || verifying}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent py-2 text-xs font-semibold text-white disabled:opacity-40">
+                  <KeyRound size={12} /> {verifying ? 'Checking with GitHub…' : 'Connect & sync'}
+                </motion.button>
+                <a href="https://github.com/settings/tokens/new?description=Super Dent X&scopes=repo,read:user" target="_blank" rel="noreferrer"
+                  className="flex items-center justify-center gap-1 text-[10.5px] text-muted hover:text-accent">
+                  Create a token on GitHub <ExternalLink size={9} />
+                </a>
+              </div>
+            </>
+          )}
         </motion.div>
 
-        {/* Supabase */}
+        {/* Account & cloud — honest status, no fake toggles */}
         <motion.div variants={{ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }}
-          className="glass p-5" style={sbConnected ? { borderColor: 'rgba(34,197,94,0.4)', boxShadow: '0 0 28px rgba(34,197,94,0.1)' } : undefined}>
+          className="glass p-5" style={userId ? { borderColor: 'rgba(99,102,241,0.35)' } : undefined}>
           <div className="flex items-center justify-between">
-            <span className="text-2xl">⚡</span>
-            {sbConnected
-              ? <span className="flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-[11px] font-semibold text-success"><Check size={11} /> Connected</span>
-              : <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-muted">Not connected</span>}
+            <span className="text-2xl">☁️</span>
+            {userId
+              ? <span className="flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-[11px] font-semibold text-success"><Check size={11} /> Syncing</span>
+              : <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-muted">Local only</span>}
           </div>
-          <div className="mt-3 font-semibold">Supabase</div>
-          <p className="mt-1 text-xs leading-relaxed text-secondary">Your own database — your log syncs to infrastructure you control.</p>
-          <div className="mt-3.5 space-y-2">
-            <input value={sbUrl} onChange={e => setSbUrl(e.target.value)} placeholder="Project URL (https://xxx.supabase.co)"
-              className="w-full rounded-lg border border-line bg-white/[0.03] px-3 py-2 font-mono text-xs placeholder:text-muted" />
-            <input value={sbAnon} onChange={e => setSbAnon(e.target.value)} type="password" placeholder="Anon key (eyJ…)"
-              className="w-full rounded-lg border border-line bg-white/[0.03] px-3 py-2 font-mono text-xs placeholder:text-muted" />
-            <motion.button type="button" whileTap={{ scale: 0.97 }} onClick={saveSupabase} disabled={!sbUrl.trim() || !sbAnon.trim()}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent py-2 text-xs font-semibold text-white disabled:opacity-40">
-              <KeyRound size={12} /> {sbConnected ? 'Update credentials' : 'Connect Supabase'}
-            </motion.button>
-            <span className="block text-center text-[10.5px] text-muted">Dashboard → Project Settings → API</span>
+          <div className="mt-3 font-semibold">Account & Cloud</div>
+          <p className="mt-1 text-xs leading-relaxed text-secondary">
+            {userId
+              ? 'You’re signed in — every ship, log and post mirrors to the cloud and comes back on any device you sign in on.'
+              : 'You’re working locally. Sign in with GitHub or email to back your log up to the cloud and keep it across devices.'}
+          </p>
+          <div className="mt-3.5 space-y-2 text-[12px]">
+            <Row icon={Cloud} label="Cloud backend" ok={supabaseReady} okText="Connected" offText="Not configured" />
+            <Row icon={Shield} label="Signed-in account" ok={Boolean(userId)} okText={profile.displayName || 'You'} offText="Not signed in" />
+            <Row icon={Database} label="Events backed up" ok={Boolean(userId) && events.length > 0} okText={`${events.length} events`} offText={`${events.length} local`} />
           </div>
+          <p className="mt-3 text-[10.5px] leading-relaxed text-muted">
+            Signing out no longer wipes your data — sign back in with the same account and everything is exactly where you left it.
+          </p>
         </motion.div>
 
         {/* PDF Export */}
@@ -203,12 +271,21 @@ export default function Integrations() {
         {toast && (
           <motion.div
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-            className="glass-strong fixed bottom-24 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap px-4 py-2.5 text-[13px] text-primary md:bottom-8"
+            className={`glass-strong fixed bottom-24 left-1/2 z-50 -translate-x-1/2 max-w-[90vw] px-4 py-2.5 text-[13px] md:bottom-8 ${toast.kind === 'err' ? 'text-red-300' : 'text-primary'}`}
           >
-            {toast}
+            {toast.msg}
           </motion.div>
         )}
       </AnimatePresence>
     </Page>
+  )
+}
+
+function Row({ icon: Icon, label, ok, okText, offText }: { icon: typeof Cloud; label: string; ok: boolean; okText: string; offText: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-line bg-white/[0.02] px-3 py-2">
+      <span className="flex items-center gap-2 text-secondary"><Icon size={13} className="text-muted" /> {label}</span>
+      <span className={`font-medium ${ok ? 'text-success' : 'text-muted'}`}>{ok ? okText : offText}</span>
+    </div>
   )
 }

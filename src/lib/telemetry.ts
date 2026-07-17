@@ -13,6 +13,7 @@ type TelemetryEvent =
   | 'real_login_fresh' | 'onboarded' | 'payment_success'
   | 'ship_logged' | 'daily_log_saved' | 'ai_generated'
   | 'pdf_exported' | 'plan_viewed' | 'credits_viewed'
+  | 'events_imported'
 
 export function track(event: TelemetryEvent, props: Record<string, string | number | boolean> = {}) {
   if (!OWNER_URL || !OWNER_ANON) return

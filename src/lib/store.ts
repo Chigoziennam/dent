@@ -28,11 +28,12 @@ interface DentState {
   // True while the store still holds the showcase seed data
   seeded: boolean
   // Integration credentials — stored locally on this device only
-  creds: { githubToken?: string; githubUser?: string; supabaseUrl?: string; supabaseAnon?: string; paystackPublicKey?: string }
+  creds: { githubToken?: string; githubUser?: string; githubLastSync?: string; supabaseUrl?: string; supabaseAnon?: string; paystackPublicKey?: string }
   aiUsed: number // AI generations used this month
 
   login: () => void
   realLogin: (user: CloudUser) => Promise<void>
+  importEvents: (incoming: ShipEvent[]) => number
   completeOnboarding: (o: { displayName: string; projectName: string; projectTagline: string; startStage: 'spark' | 'building' | 'launched' }) => void
   logout: () => void
   addEvent: (e: { title: string; category: EventCategory; source?: EventSource; description?: string }) => void
@@ -94,6 +95,23 @@ function checkAchievements(state: Pick<DentState, 'events' | 'dailyLogs' | 'cont
   return { unlocked, newCode, bonusXP }
 }
 
+// Union two event lists by id — local edits win on conflict, order by newest.
+// This is what makes a returning user NEVER lose data: cloud and local merge,
+// neither side clobbers the other.
+function mergeEvents(local: ShipEvent[], cloud: ShipEvent[]): ShipEvent[] {
+  const byId = new Map<string, ShipEvent>()
+  for (const e of cloud) byId.set(e.id, e)
+  for (const e of local) byId.set(e.id, e) // local overwrites same id
+  return [...byId.values()].sort((a, b) => (b.eventTime || '').localeCompare(a.eventTime || ''))
+}
+
+function mergeLogs(local: DailyLog[], cloud: DailyLog[]): DailyLog[] {
+  const byDate = new Map<string, DailyLog>()
+  for (const l of cloud) byDate.set(l.logDate, l)
+  for (const l of local) byDate.set(l.logDate, l) // local edits win
+  return [...byDate.values()].sort((a, b) => b.logDate.localeCompare(a.logDate))
+}
+
 function buildInitial() {
   const seed = generateSeed()
   const streak = computeStreak(seed.events, seed.dailyLogs)
@@ -131,12 +149,15 @@ export const useDent = create<DentState>()(
       // Demo door: keeps the seeded showcase data
       login: () => { track('demo_login'); set({ loggedIn: true }) },
 
-      // Real account: first arrival wipes the demo seed so the user starts
-      // THEIR story — name comes from Google/GitHub/email, never "Chigozie".
+      // Real account. We only WIPE local data when this device is switching
+      // owners — i.e. it still holds the demo seed, or a *different* person is
+      // signing in. A returning user (same id, even after signing out) keeps
+      // everything and merges the cloud on top. This is the fix for the app
+      // "forgetting" people every time they sign out and back in.
       realLogin: async (user) => {
         const s = get()
-        const fresh = s.seeded || s.userId !== user.id
-        if (fresh) {
+        const switchingOwner = s.seeded || (!!s.userId && s.userId !== user.id)
+        if (switchingOwner) {
           track('real_login_fresh')
           set({
             loggedIn: true, userId: user.id, seeded: false,
@@ -157,24 +178,40 @@ export const useDent = create<DentState>()(
             },
           })
         } else {
-          set({ loggedIn: true })
+          // Returning user: claim the session, keep their local history intact,
+          // and top up identity fields the OAuth payload carries.
+          set({
+            loggedIn: true, userId: user.id, seeded: false,
+            profile: {
+              ...s.profile,
+              email: user.email ?? s.profile.email,
+              avatarUrl: user.avatarUrl ?? s.profile.avatarUrl,
+              username: s.profile.username || user.username || 'builder',
+              displayName: s.profile.displayName || user.name || 'Builder',
+            },
+          })
         }
-        // Mirror down whatever the cloud already knows (other devices, past sessions)
+        // Mirror down whatever the cloud already knows and MERGE it with local —
+        // union by id / date, so nothing on either side is lost.
         try {
           const [cp, data] = await Promise.all([fetchCloudProfile(user.id), fetchCloudData(user.id)])
           if (data && (data.events.length > 0 || data.dailyLogs.length > 0)) {
-            const streak = computeStreak(data.events, data.dailyLogs)
-            set(st => ({
-              events: data.events,
-              dailyLogs: data.dailyLogs,
-              profile: {
-                ...st.profile,
-                streakCurrent: streak.current,
-                streakLongest: streak.longest,
-                totalShips: data.events.length,
-                builderScore: data.events.length * 10 + data.dailyLogs.length * 25,
-              },
-            }))
+            set(st => {
+              const events = mergeEvents(st.events, data.events)
+              const dailyLogs = mergeLogs(st.dailyLogs, data.dailyLogs)
+              const streak = computeStreak(events, dailyLogs)
+              return {
+                events,
+                dailyLogs,
+                profile: {
+                  ...st.profile,
+                  streakCurrent: streak.current,
+                  streakLongest: streak.longest,
+                  totalShips: events.length,
+                  builderScore: Math.max(st.profile.builderScore, events.length * 10 + dailyLogs.length * 25),
+                },
+              }
+            })
           }
           if (cp) {
             set(st => ({
@@ -201,9 +238,13 @@ export const useDent = create<DentState>()(
         track('onboarded', { stage: o.startStage })
       },
 
+      // Sign out of the session but REMEMBER whose device this is. Keeping
+      // userId means the next sign-in with the same account is recognised as a
+      // return (data kept), while a different account still triggers a clean
+      // wipe via the switchingOwner check in realLogin.
       logout: () => {
         supabase?.auth.signOut()
-        set({ loggedIn: false, userId: null })
+        set({ loggedIn: false })
       },
 
       addEvent: (e) => {
@@ -234,6 +275,31 @@ export const useDent = create<DentState>()(
         track('ship_logged', { category: ev.category })
         set({ events, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
         if (s.userId) pushEvent(s.userId, ev)
+      },
+
+      // Bulk import from a real integration (GitHub sync). Events arrive with
+      // stable ids (e.g. gh_<sha>) so re-syncing never creates duplicates.
+      // Returns how many were actually new.
+      importEvents: (incoming) => {
+        const s = get()
+        const have = new Set(s.events.map(e => e.id))
+        const fresh = incoming.filter(e => !have.has(e.id))
+        if (fresh.length === 0) return 0
+        const events = [...fresh, ...s.events].sort((a, b) => (b.eventTime || '').localeCompare(a.eventTime || ''))
+        const streak = computeStreak(events, s.dailyLogs)
+        const profile = {
+          ...s.profile,
+          totalShips: s.profile.totalShips + fresh.length,
+          builderScore: s.profile.builderScore + fresh.length * 10,
+          streakCurrent: streak.current,
+          streakLongest: streak.longest,
+        }
+        const ach = checkAchievements({ events, dailyLogs: s.dailyLogs, content: s.content, profile, unlocked: s.unlocked })
+        profile.builderScore += ach.bonusXP
+        track('events_imported', { count: fresh.length })
+        set({ events, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
+        if (s.userId) fresh.forEach(e => pushEvent(s.userId!, e))
+        return fresh.length
       },
 
       togglePin: (id) => set(s => ({ events: s.events.map(e => e.id === id ? { ...e, isPinned: !e.isPinned } : e) })),

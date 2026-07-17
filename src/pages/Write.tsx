@@ -21,6 +21,7 @@ const PLATFORMS: { key: ContentPlatform; label: string; pro?: boolean }[] = [
 ]
 const TONES = Object.keys(TONE_META) as Tone[]
 const RANGES = [
+  { key: 0, label: 'Today' },
   { key: 7, label: 'This Week' },
   { key: 30, label: 'This Month' },
   { key: 90, label: 'All 90 Days' },
@@ -53,6 +54,8 @@ export default function Write() {
       if (h.body) setBody(h.body)
       if (h.platform) setPlatform(h.platform)
       if (h.tone) setTone(h.tone)
+      if (h.mode) setMode(h.mode)
+      if (typeof h.range === 'number') setRange(h.range)
     } catch { /* ignore */ }
   }, [])
 

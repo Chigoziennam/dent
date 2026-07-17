@@ -1,4 +1,4 @@
-import type { ShipEvent, DailyLog, ContentPlatform, Tone } from './types'
+import type { ShipEvent, DailyLog, ContentPlatform, Tone, EventCategory } from './types'
 import { CATEGORY_META } from './types'
 
 // Works in two modes:
@@ -31,18 +31,19 @@ async function callN8n(task: string, payload: Record<string, unknown>): Promise<
 }
 
 // Style DNA distilled from what actually performs in #buildinpublic —
-// raw numbers beat polish, honesty beats hype, threads with receipts win.
-const SYSTEM_PROMPT = `You are Super Dent X AI, an assistant for founders who build in public.
-Write like the best #buildinpublic accounts on X and LinkedIn, never like a marketer:
-- RAW NUMBERS FIRST: "₦47k MRR, lost 2 users this week, onboarding is broken" outperforms every polished announcement. If revenue/user/amount data exists in the events, lead with it.
-- HONESTY > HYPE: stagnation posts, failure stories and "here's what broke" get more replies than wins. Never hide the hard part.
-- DAY COUNTS anchor the story: "Day 47 of building X" — use the streak.
-- MILESTONE FORMAT: what shipped + the technical fight it took + what the user gets now.
-- WEEKLY NUMBERS FORMAT: users, revenue, what got built, one lesson, what's next — real numbers even if tiny ("3 users. all friends. still counts.").
-- THREAD HOOKS like "7 things I learned going 0→₦X" when there's enough material.
-- Tweets max 280 chars or a clear numbered thread. LinkedIn 800-1200 chars, professional but human.
-- Never open with "🚀 Exciting news!", "I'm thrilled", or any AI-sounding phrase. No hashtag spam (max 1).
-- Sound like the founder typed it on their phone after a real day.`
+// raw numbers beat polish, honesty beats hype, the STORY behind the ship wins.
+const SYSTEM_PROMPT = `You are Super Dent X AI, ghost-writing for a founder who builds in public.
+The post is about the WORK — the actual ships — not the product's name. Lead with what was built and the story behind it; the project name is a supporting detail, never the headline, and never repeated like a slogan.
+
+Rules that make it read like a real builder, not a marketer:
+- THE STORY IS THE POINT. Every ship has a "why it mattered" — the bug that took 3 days, the deploy that finally went green, the feature a user begged for. Use the builder's own notes/details as the emotional core. Make it feel earned, alive, a little bit proud.
+- CONNECT RELATED SHIPS. If there's a commit AND a deploy (or a fix AND a release) close together, tell it as ONE arc: "wrote it, shipped it, it's live" — not two bullet points. Analyze precisely what actually happened.
+- RAW NUMBERS FIRST when they exist: "₦47k MRR, lost 2 users, onboarding is broken" beats any polished line. Money and user counts lead.
+- HONESTY > HYPE: the hard part, the blocker, the thing that fought back — keep it. That's what earns replies.
+- Anchor with the day count / streak when it adds weight ("day 47 of this").
+- Tweets ≤ 280 chars or a clean numbered thread. LinkedIn 800–1200 chars, human. Newsletter/blog can breathe.
+- NEVER open with "🚀 Exciting news!", "I'm thrilled to announce", "Delve", or any AI tell. Max 1 hashtag. No emoji soup.
+- Sound like the founder typed it on their phone right after the work, still a bit hyped or a bit wrecked. Passion over polish.`
 
 interface GenParams {
   events: ShipEvent[]
@@ -54,12 +55,15 @@ interface GenParams {
 }
 
 export async function generateContent(p: GenParams): Promise<string> {
+  const a = analyzeShips(p.events)
   const alive = await callN8n('generate', {
     platform: p.platform, tone: p.tone, projectName: p.projectName, projectTagline: p.projectTagline,
     // detail carries the note/proof/effort the builder typed — this is what
     // turns "generic AI post" into receipts with real numbers.
     events: p.events.map(e => ({ category: e.category, title: e.title, date: e.eventDate, detail: e.description?.slice(0, 240) })),
     dailyLogs: p.dailyLogs.map(l => ({ date: l.logDate, built: l.whatIBuilt, learned: l.whatILearned, blocked: l.whatBlockedMe, energy: l.energyLevel })),
+    // Pre-chewed analysis so the model tells ONE precise story (e.g. commit+deploy = one arc).
+    analysis: { combos: a.combos, counts: a.counts, money: a.money, headline: a.headline ? cleanTitle(a.headline.title) : null, stories: a.stories },
   })
   if (alive) return alive
   if (API_KEY) {
@@ -78,15 +82,16 @@ export async function generateContent(p: GenParams): Promise<string> {
           system: SYSTEM_PROMPT,
           messages: [{
             role: 'user',
-            content: `Project: ${p.projectName} — ${p.projectTagline}
+            content: `Context (project, for reference only — do NOT make it the headline): ${p.projectName} — ${p.projectTagline}
 
-Events this period:
+The ships to write about:
 ${p.events.map(e => `- [${e.category}] ${e.title} (${e.eventDate})${e.description ? ` — ${e.description.slice(0, 160).replace(/\n/g, '; ')}` : ''}`).join('\n')}
+${a.combos.length ? `\nWhat connects: ${a.combos.join('; ')} — tell these as ONE arc, not separate bullets.` : ''}${a.money ? `\nMoney/customer: ${a.money} — lead with this.` : ''}
 
 Daily reflections:
 ${p.dailyLogs.map(l => `${l.logDate}: Built: ${l.whatIBuilt}. Learned: ${l.whatILearned}`).join('\n')}
 
-Generate a ${p.platform} post in ${p.tone} voice.`,
+Write a ${p.platform} post in ${p.tone} voice. Center it on the WORK and the story behind it. Real, specific, a little proud. The project name is background, not the hook.`,
           }],
         }),
       })
@@ -99,64 +104,140 @@ Generate a ${p.platform} post in ${p.tone} voice.`,
   return template(p)
 }
 
-function topEvents(events: ShipEvent[], n = 4): ShipEvent[] {
-  return [...events].sort((a, b) => b.importance - a.importance).slice(0, n)
+function cleanTitle(t: string): string {
+  return t.replace(/^(feat|fix|chore|refactor|perf|docs|style|test)(\([^)]*\))?:\s*/i, '').trim()
+}
+
+// The "story behind it" — the human note the builder typed, stripped of the
+// scaffolding lines (Belongs to / Effort / Link) and the gh boilerplate.
+function extractStory(e: ShipEvent): string | null {
+  if (!e.description) return null
+  const first = e.description.split('\n')
+    .map(l => l.trim())
+    .find(l => l && !/^(belongs to|effort|link):/i.test(l) && !/^`?[0-9a-f]{7}`?\s*·/.test(l))
+  return first && first.length > 3 ? first : null
+}
+
+// Pull a money figure out of a title/note if the builder wrote one.
+function moneyLine(events: ShipEvent[]): string | null {
+  const m = events.find(e => e.category === 'revenue' || e.category === 'customer')
+  if (!m) return null
+  const story = extractStory(m)
+  return story ? `${cleanTitle(m.title)} — ${story}` : cleanTitle(m.title)
+}
+
+export interface ShipAnalysis {
+  events: ShipEvent[]
+  counts: Record<string, number>
+  headline: ShipEvent | null
+  stories: { title: string; story: string; category: EventCategory }[]
+  combos: string[]
+  days: number
+  money: string | null
+}
+
+// Precise analysis of a set of ships: what got built, what connects to what,
+// and the stories worth telling. This is what lets a commit + a deploy become
+// ONE narrative instead of two dead bullets.
+export function analyzeShips(events: ShipEvent[]): ShipAnalysis {
+  const counts = countBy(events)
+  const sorted = [...events].sort((a, b) => b.importance - a.importance || b.eventTime.localeCompare(a.eventTime))
+  const headline = sorted[0] ?? null
+  const stories = sorted
+    .map(e => { const s = extractStory(e); return s ? { title: cleanTitle(e.title), story: s, category: e.category } : null })
+    .filter((x): x is { title: string; story: string; category: EventCategory } => !!x)
+    .slice(0, 4)
+
+  // Same-day category combinations → a real sentence about the arc.
+  const byDay = new Map<string, Set<EventCategory>>()
+  for (const e of events) {
+    if (!byDay.has(e.eventDate)) byDay.set(e.eventDate, new Set())
+    byDay.get(e.eventDate)!.add(e.category)
+  }
+  const combos: string[] = []
+  for (const cats of byDay.values()) {
+    if (cats.has('commit') && cats.has('deployment')) combos.push('wrote the code and pushed it live the same day')
+    else if (cats.has('bugfix') && cats.has('deployment')) combos.push('killed the bug and shipped the fix to prod')
+    else if (cats.has('feature') && cats.has('deployment')) combos.push('built it and put it straight in front of users')
+    else if (cats.has('feature') && cats.has('commit')) combos.push('turned a pile of commits into a real feature')
+  }
+
+  return {
+    events,
+    counts,
+    headline,
+    stories,
+    combos: [...new Set(combos)].slice(0, 2),
+    days: byDay.size,
+    money: moneyLine(events),
+  }
+}
+
+// A tight, story-first bullet for a ship — title + the why, when we have it.
+function shipLine(e: ShipEvent): string {
+  const story = extractStory(e)
+  const title = cleanTitle(e.title)
+  return story ? `→ ${title} — ${story}` : `→ ${title}`
 }
 
 function template(p: GenParams): string {
-  const top = topEvents(p.events)
-  const bullets = top.map(e => `→ ${e.title.replace(/^(feat|fix|chore|refactor|perf): /, '')}`)
-  const counts = countBy(p.events)
+  const a = analyzeShips(p.events)
+  const top = a.events.slice().sort((x, y) => y.importance - x.importance).slice(0, 4)
+  const bullets = top.map(shipLine)
+  const counts = a.counts
   const learned = p.dailyLogs.find(l => l.whatILearned)?.whatILearned
   const blocked = p.dailyLogs.find(l => l.whatBlockedMe)?.whatBlockedMe
-  // Money events lead — raw numbers are the whole culture
-  const money = p.events.find(e => e.category === 'revenue' || e.category === 'customer')
+  const combo = a.combos[0]
+  const headStory = a.headline ? extractStory(a.headline) : null
+  const numbers = `${counts.commit ?? 0} commits · ${counts.deployment ?? 0} deploys${a.money ? ` · 💰 ${a.money}` : ''}`
 
   switch (p.platform) {
     case 'twitter': {
       if (p.tone === 'technical') {
-        return `Shipped this week on ${p.projectName}:\n\n${bullets.join('\n')}\n\n${counts.commit ?? 0} commits, ${counts.deployment ?? 0} deploys.${blocked ? ` What fought back: ${blocked.slice(0, 80)}.` : ''} ${learned ? `Lesson: ${learned}` : 'Consistency compounds.'}`
+        return `${combo ? `Today I ${combo}.\n\n` : ''}${bullets.join('\n')}\n\n${counts.commit ?? 0} commits, ${counts.deployment ?? 0} deploys.${blocked ? ` What fought back: ${blocked.slice(0, 80)}.` : ''} ${learned ? `Lesson: ${learned}` : ''}`.trim()
       }
       if (p.tone === 'storytelling') {
-        return `A week ago this didn't exist.\n\nNow ${p.projectName} has:\n${bullets.join('\n')}\n\n${money ? `And the first receipts came in: ${money.title}.\n\n` : ''}Building in public, one ship at a time.`
+        return `${headStory ? `${headStory}\n\n` : combo ? `${cap(combo)}.\n\n` : ''}${bullets.join('\n')}\n\n${a.money ? `And the receipts landed: ${a.money}.\n\n` : ''}This is the part nobody sees — so I'm writing it down.`.trim()
       }
       if (p.tone === 'hype') {
-        return `${p.projectName} IS COOKING 🔥\n\n${bullets.join('\n')}\n\n${money ? `${money.title} ✅\n` : ''}${counts.commit ?? 0} commits. ${counts.deployment ?? 0} deploys. Zero days off.\n\nWe are SO back.`
+        return `${combo ? `${cap(combo)} 🔥\n\n` : 'big one today 🔥\n\n'}${bullets.join('\n')}\n\n${a.money ? `${a.money} ✅\n` : ''}${numbers}\n\nwe do not stop.`.trim()
       }
       if (p.tone === 'mentor') {
-        return `A real week of building looks like this:\n\n${bullets.join('\n')}\n\nNot glamorous. Just consistent. ${learned ? `Biggest lesson: ${learned}` : 'Show up again tomorrow.'}`
+        return `A real day of building:\n\n${bullets.join('\n')}\n\n${combo ? `The lesson in it: ${combo} — shipping beats hoarding half-done work. ` : ''}${learned ? `Biggest takeaway: ${learned}` : 'Show up again tomorrow.'}`.trim()
       }
       if (p.tone === 'unfiltered') {
-        return `week recap, no polish:\n\n${bullets.join('\n')}\n\n${blocked ? `${blocked.slice(0, 70).toLowerCase()} nearly won. ` : ''}some of it fought back. shipped anyway.`
+        return `no polish:\n\n${bullets.join('\n')}\n\n${blocked ? `${blocked.slice(0, 70).toLowerCase()} nearly won. ` : ''}${combo ? `${combo} anyway. ` : ''}shipped.`.trim()
       }
-      // founder default: the weekly-numbers format that actually performs
-      return `${p.projectName}, this week — honest numbers:\n\n${bullets.join('\n')}\n\n📊 ${p.events.length} ships · ${counts.commit ?? 0} commits · ${counts.deployment ?? 0} deploys${money ? `\n💰 ${money.title}` : ''}\n\n${learned ? `Lesson: ${learned}` : blocked ? `Still fighting: ${blocked.slice(0, 60)}` : 'Small numbers. Still counts. Still building.'}`
+      // founder default — story first, numbers as proof
+      return `${headStory ? `${headStory}\n\n` : combo ? `${cap(combo)}.\n\n` : ''}${bullets.join('\n')}\n\n📊 ${numbers}\n\n${learned ? `Lesson: ${learned}` : blocked ? `Still fighting: ${blocked.slice(0, 60)}` : 'Small steps. Still counts.'}`.trim()
     }
     case 'linkedin': {
       if (p.tone === 'storytelling') {
-        return `Every Friday I look back at what actually got built.\n\nThis week on ${p.projectName}:\n\n${bullets.join('\n')}\n\n${learned ? `The lesson that stuck with me: ${learned}\n\n` : ''}When you capture the work as it happens, the story writes itself. That's the whole idea behind building in public — the proof is in the shipping, not the pitch.\n\nWhat did you ship this week?`
+        return `${headStory ? `${headStory}\n\n` : ''}Here's what actually happened:\n\n${bullets.join('\n')}\n\n${combo ? `The best part: I ${combo} — that loop, tight and shipped, is the whole game.\n\n` : ''}${learned ? `The lesson that stuck: ${learned}\n\n` : ''}Building in public means showing the work, not the pitch.\n\nWhat did you ship this week?`.trim()
       }
-      return `Weekly update on ${p.projectName} (${p.projectTagline}):\n\n${bullets.join('\n')}\n\nNumbers: ${p.events.length} events logged, ${counts.commit ?? 0} commits, ${counts.deployment ?? 0} deployments.\n\n${learned ? `One thing I learned: ${learned}` : 'Momentum is the moat.'}`
+      return `${combo ? `Today I ${combo}.` : 'Progress update from the build.'}\n\n${bullets.join('\n')}\n\nThe numbers behind it: ${numbers}.\n\n${learned ? `One thing I learned: ${learned}` : 'Momentum is the moat.'}`.trim()
     }
     case 'newsletter': {
-      return `## This week on ${p.projectName}\n\nIt was a shipping week. ${p.events.length} events made it into the log — here's what mattered:\n\n${bullets.map(b => b.replace('→ ', '- ')).join('\n')}\n\n${learned ? `**What I learned:** ${learned}\n\n` : ''}**By the numbers:** ${counts.commit ?? 0} commits · ${counts.deployment ?? 0} deploys · ${(counts.revenue ?? 0) + (counts.customer ?? 0)} revenue/customer events\n\nNext week: more of the same, but faster. Thanks for following along.`
+      return `## What got built${a.days > 1 ? ` (${a.days} days)` : ' today'}\n\n${combo ? `The short version: I ${combo}. The longer version:\n\n` : ''}${bullets.map(b => b.replace('→ ', '- ')).join('\n')}\n\n${learned ? `**What I learned:** ${learned}\n\n` : ''}**By the numbers:** ${numbers}\n\nThanks for following along.`.trim()
     }
     case 'changelog': {
-      return `### ${p.projectName} — Weekly Changelog\n\n${top.map(e => `- **${CATEGORY_META[e.category].label}:** ${e.title}`).join('\n')}\n\n*${p.events.length} total changes this week.*`
+      return `${top.map(e => `- **${CATEGORY_META[e.category].label}:** ${cleanTitle(e.title)}`).join('\n')}\n\n*${p.events.length} changes${a.days > 1 ? ` across ${a.days} days` : ' today'}.*`
     }
     case 'threads':
-      return `A week ago this didn't exist.\n\nNow ${p.projectName} has:\n${bullets.join('\n')}\n\nBuilding in public, one ship at a time.`
+      return `${headStory ? `${headStory}\n\n` : combo ? `${cap(combo)}.\n\n` : ''}${bullets.join('\n')}\n\nBuilding in public, one ship at a time.`.trim()
     case 'devto':
-      return `## ${p.projectName}: this week's build log\n\n${bullets.map(b => b.replace('→ ', '- ')).join('\n')}\n\n${counts.commit ?? 0} commits, ${counts.deployment ?? 0} deploys. ${learned ? `Biggest lesson: ${learned}` : ''}`
+      return `## Build log${a.days > 1 ? ` — last ${a.days} days` : ' — today'}\n\n${combo ? `I ${combo}. Here's the breakdown:\n\n` : ''}${bullets.map(b => b.replace('→ ', '- ')).join('\n')}\n\n${numbers}. ${learned ? `Biggest lesson: ${learned}` : ''}`.trim()
     case 'producthunt':
-      return `${p.projectName} — what shipped this week:\n\n${bullets.join('\n')}\n\nShipping in public. Feedback welcome.`
+      return `What just shipped:\n\n${bullets.join('\n')}\n\n${combo ? `${cap(combo)}. ` : ''}Shipping in public — feedback welcome.`.trim()
     case 'resume':
-      return top.map(e => `• ${e.title.replace(/^(feat|fix|chore|refactor|perf): /, '').replace(/^./, c => c.toUpperCase())} — ${p.projectName}`).join('\n')
+      return top.map(e => `• ${cap(cleanTitle(e.title))}`).join('\n')
     case 'blog': {
-      return `# Building ${p.projectName}: a week in the log\n\n${p.projectTagline}\n\nThis week produced ${p.events.length} logged events. The highlights:\n\n${bullets.map(b => b.replace('→ ', '- ')).join('\n')}\n\n${learned ? `## What I learned\n\n${learned}\n\n` : ''}## Why I log everything\n\nBy Friday I used to forget what Monday looked like. Now every commit, deploy and customer conversation lands in one timeline — and content like this post writes itself from the raw material.`
+      return `# ${a.headline ? cap(cleanTitle(a.headline.title)) : 'A day in the log'}\n\n${headStory ?? p.projectTagline}\n\n${combo ? `Today I ${combo}. ` : ''}Here's what made it into the log:\n\n${bullets.map(b => b.replace('→ ', '- ')).join('\n')}\n\n${learned ? `## What I learned\n\n${learned}\n\n` : ''}## Why I log everything\n\nBy Friday I used to forget what Monday looked like. Now every commit, deploy and conversation lands in one timeline — and posts like this write themselves from the raw material.`.trim()
     }
   }
 }
+
+function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1) }
 
 // ── The Humanizer ─────────────────────────────────────────────
 // Takes raw builder notes and reshapes them into a post that reads

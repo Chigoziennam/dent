@@ -181,6 +181,14 @@ export default function Today() {
     setTimeout(() => setXpFloat(false), 1600)
   }
 
+  // Hand today's ships straight to the writer — it opens on the "Today" range
+  // so the post is analyzed from exactly what you shipped (commit + deploy and
+  // all) rather than a whole week of noise.
+  const postToday = () => {
+    sessionStorage.setItem('shiplog-handoff', JSON.stringify({ mode: 'ships', range: 0, tone: profile.tone }))
+    navigate('/app/write')
+  }
+
   return (
     <Page>
       {/* ── Hero: greeting + streak ring + mascot ── */}
@@ -541,6 +549,27 @@ export default function Today() {
           </div>
         </div>
       </GlassCard>
+
+      {/* Turn today's log into a post — the whole point of capturing it */}
+      <AnimatePresence>
+        {todaysEvents.length > 0 && (
+          <motion.button
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            whileTap={{ scale: 0.99 }}
+            onClick={postToday}
+            className="sheen mt-4 flex w-full items-center gap-3 rounded-2xl border border-accent/40 bg-accent/[0.08] p-4 text-left"
+          >
+            <span className="shrink-0"><AICore size={26} color="#a5b4fc" /></span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-primary">Turn today's {todaysEvents.length} {todaysEvents.length === 1 ? 'ship' : 'ships'} into a post</div>
+              <div className="text-xs text-secondary">
+                The AI reads exactly what you shipped today — {[...new Set(todaysEvents.map(e => CATEGORY_META[e.category].label.toLowerCase()))].slice(0, 3).join(', ')} — and writes the story behind it.
+              </div>
+            </div>
+            <span className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white">Write it →</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Quick actions */}
       <div className="no-scrollbar mt-4 flex gap-2.5 overflow-x-auto pb-1">

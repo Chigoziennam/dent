@@ -12,6 +12,11 @@ alter table profiles add column if not exists start_stage text
 -- Ship events: which GitHub repo a synced commit came from (repo focus in the writer)
 alter table ship_events add column if not exists repo text;
 
+-- Profiles: the builder's chosen look — so a new browser shows YOUR face,
+-- not a reset default. (website/tone/theme columns already exist in schema.sql)
+alter table profiles add column if not exists avatar text;
+alter table profiles add column if not exists avatar_hue int;
+
 -- Payments: which currency was actually charged (NGN or USD)
 alter table payments add column if not exists currency text default 'NGN';
 

@@ -123,6 +123,12 @@ export function pushProfile(userId: string, p: Partial<Profile> & { email?: stri
     ...(p.projectName ? { current_project_name: p.projectName } : {}),
     ...(p.projectTagline !== undefined ? { current_project_tagline: p.projectTagline } : {}),
     ...(p.tier ? { tier: p.tier } : {}),
+    // The rest of who they are — links, voice, look. All exist in schema.sql.
+    ...(p.website !== undefined ? { website: p.website } : {}),
+    ...(p.twitter !== undefined ? { twitter_handle: p.twitter } : {}),
+    ...(p.github !== undefined ? { github_username: p.github } : {}),
+    ...(p.tone ? { default_tone: p.tone } : {}),
+    ...(p.theme ? { theme: p.theme } : {}),
     updated_at: new Date().toISOString(),
   }
   // Newer columns (upgrade-payments-accounts.sql). If the DB hasn't run that
@@ -132,6 +138,8 @@ export function pushProfile(userId: string, p: Partial<Profile> & { email?: stri
     ...core,
     ...(p.startStage ? { start_stage: p.startStage } : {}),
     ...(p.email ? { email: p.email } : {}),
+    ...(p.avatar !== undefined ? { avatar: p.avatar } : {}),
+    ...(p.avatarHue !== undefined ? { avatar_hue: p.avatarHue } : {}),
   }
   supabase.from('profiles').upsert(full, { onConflict: 'id' }).then(({ error }) => {
     if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message))) {

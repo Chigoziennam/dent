@@ -254,6 +254,15 @@ export const useDent = create<DentState>()(
                 projectTagline: (cp.current_project_tagline as string) ?? st.profile.projectTagline,
                 startStage: (cp.start_stage as Profile['startStage']) ?? st.profile.startStage,
                 tier: (cp.tier as Profile['tier']) ?? st.profile.tier,
+                // The look and voice they chose — a new browser must show THEM
+                avatar: (cp.avatar as string) ?? st.profile.avatar,
+                avatarHue: (cp.avatar_hue as number) ?? st.profile.avatarHue,
+                avatarUrl: (cp.avatar_url as string) ?? st.profile.avatarUrl,
+                website: (cp.website as string) ?? st.profile.website,
+                twitter: (cp.twitter_handle as string) ?? st.profile.twitter,
+                github: (cp.github_username as string) ?? st.profile.github,
+                tone: (cp.default_tone as Profile['tone']) ?? st.profile.tone,
+                theme: (cp.theme as Profile['theme']) ?? st.profile.theme,
                 // A cloud profile with a project name means this person already
                 // did the initial steps — NEVER send them through onboarding or
                 // the tour again, on any browser or device.

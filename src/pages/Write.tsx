@@ -5,6 +5,7 @@ import { subDays, format } from 'date-fns'
 import { Sparkles, Copy, Save, Check, ChevronDown, Wand2, Lock, Atom, ExternalLink } from 'lucide-react'
 import { useDent } from '../lib/store'
 import { generateContent, humanize, fuse, composeUrl } from '../lib/ai'
+import { repoOf } from '../lib/github'
 import { entitlementsFor, platformAllowed } from '../lib/plan'
 import { TONE_META, type ContentPlatform, type Tone } from '../lib/types'
 import { Page, CategoryPill, SectionTitle } from '../components/ui'
@@ -57,11 +58,24 @@ export default function Write() {
       if (h.tone) setTone(h.tone)
       if (h.mode) setMode(h.mode)
       if (typeof h.range === 'number') setRange(h.range)
+      if (h.repo) setFocusRepo(h.repo)
     } catch { /* ignore */ }
   }, [])
 
   const cutoff = format(subDays(new Date(), range), 'yyyy-MM-dd')
-  const rangeEvents = useMemo(() => events.filter(e => e.eventDate >= cutoff), [events, cutoff])
+  // Repo focus: when set, GitHub ships are narrowed to that repo; manual
+  // ships (milestones, revenue, customer notes) still ride along — they
+  // belong to the project story regardless of which repo they touch.
+  const [focusRepo, setFocusRepo] = useState<string | null>(null)
+  const inRange = useMemo(() => events.filter(e => e.eventDate >= cutoff), [events, cutoff])
+  const rangeRepos = useMemo(
+    () => [...new Set(inRange.map(repoOf).filter((r): r is string => !!r))].slice(0, 8),
+    [inRange],
+  )
+  const rangeEvents = useMemo(
+    () => inRange.filter(e => !focusRepo || e.source !== 'github' || repoOf(e) === focusRepo),
+    [inRange, focusRepo],
+  )
   const rangeLogs = useMemo(() => dailyLogs.filter(l => l.logDate >= cutoff), [dailyLogs, cutoff])
 
   const pickPlatform = (p: { key: ContentPlatform; pro?: boolean }) => {
@@ -168,6 +182,26 @@ export default function Write() {
                 <SectionTitle>Source Material · {rangeEvents.length} events</SectionTitle>
                 <ChevronDown size={14} className={`text-muted transition-transform lg:hidden ${contextOpen ? 'rotate-180' : ''}`} />
               </button>
+              {/* Repo focus — write about one project or the whole log */}
+              {rangeRepos.length > 0 && (
+                <div className="no-scrollbar mb-3 flex items-center gap-1.5 overflow-x-auto">
+                  <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted">Repo</span>
+                  <button
+                    type="button" onClick={() => setFocusRepo(null)}
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${focusRepo === null ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}
+                  >
+                    All
+                  </button>
+                  {rangeRepos.map(r => (
+                    <button
+                      key={r} type="button" onClick={() => setFocusRepo(focusRepo === r ? null : r)}
+                      className={`shrink-0 rounded-full border px-2.5 py-1 font-mono text-[11px] ${focusRepo === r ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className={`space-y-2 ${contextOpen ? '' : 'hidden lg:block'}`}>
                 {rangeEvents.slice(0, 14).map(e => (
                   <div key={e.id} className="flex items-center gap-2 rounded-lg border border-line bg-white/[0.02] px-3 py-2">

@@ -80,6 +80,7 @@ create table if not exists ship_events (
   category event_category not null default 'other',
   title text not null,
   description text,
+  repo text,
   metadata jsonb default '{}',
   importance smallint default 5 check (importance between 1 and 10),
   is_pinned boolean default false,

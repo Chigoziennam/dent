@@ -9,6 +9,12 @@ alter table profiles add column if not exists email text;
 alter table profiles add column if not exists start_stage text
   check (start_stage in ('spark','building','launched'));
 
+-- Ship events: which GitHub repo a synced commit came from (repo focus in the writer)
+alter table ship_events add column if not exists repo text;
+
+-- Payments: which currency was actually charged (NGN or USD)
+alter table payments add column if not exists currency text default 'NGN';
+
 -- PAYMENTS — every Paystack checkout lands here the second it succeeds.
 -- WHERE TO LOOK: Supabase → Table Editor → payments
 --   email        → who paid

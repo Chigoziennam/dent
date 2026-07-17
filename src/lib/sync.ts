@@ -11,6 +11,36 @@
 import { supabase } from './supabase'
 import type { ShipEvent, DailyLog, Profile, ChangelogEntry } from './types'
 
+// ── Sync health — failures must be VISIBLE, never silent ──
+// Every push records its outcome here; the Integrations page reads it so a
+// dead Supabase project shows up as a red "not backing up" instead of a lie.
+let lastSyncError: string | null = null
+let lastSyncOk: string | null = null
+export const syncHealth = () => ({ error: lastSyncError, lastOk: lastSyncOk })
+function noteResult(scope: string, error: { message: string } | null) {
+  if (error) {
+    lastSyncError = `${scope}: ${error.message}`
+    console.error(`[sync] ${scope} FAILED — data is NOT backing up:`, error.message)
+  } else {
+    lastSyncOk = new Date().toISOString()
+    lastSyncError = null
+  }
+}
+
+// Can we actually reach the Supabase project? A deleted/paused project fails
+// DNS entirely — fetch throws — which is different from an RLS/schema error.
+export async function checkCloudHealth(): Promise<'ok' | 'unreachable' | 'unconfigured'> {
+  const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
+  if (!url || !supabase) return 'unconfigured'
+  try {
+    const res = await fetch(`${url.replace(/\/$/, '')}/auth/v1/health`, { signal: AbortSignal.timeout(6000) })
+    return res.ok ? 'ok' : 'unreachable'
+  } catch {
+    lastSyncError = 'Supabase project unreachable — check the project still exists'
+    return 'unreachable'
+  }
+}
+
 export interface CloudUser {
   id: string
   email?: string
@@ -59,6 +89,7 @@ export async function fetchCloudData(userId: string): Promise<{ events: ShipEven
     isPinned: r.is_pinned ?? false,
     eventDate: r.event_date,
     eventTime: r.event_time,
+    repo: r.repo ?? undefined,
   }))
   const dailyLogs: DailyLog[] = (dl.data ?? []).map(r => ({
     id: r.id,
@@ -86,7 +117,7 @@ export function pushProfile(userId: string, p: Partial<Profile> & { email?: stri
     ...(p.email ? { email: p.email } : {}),
     ...(p.tier ? { tier: p.tier } : {}),
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' }).then(({ error }) => { if (error) console.warn('[sync] profile:', error.message) })
+  }, { onConflict: 'id' }).then(({ error }) => noteResult('profile', error))
 }
 
 export function pushEvent(userId: string, e: ShipEvent) {
@@ -101,7 +132,8 @@ export function pushEvent(userId: string, e: ShipEvent) {
     is_pinned: e.isPinned,
     event_date: e.eventDate,
     event_time: e.eventTime,
-  }).then(({ error }) => { if (error) console.warn('[sync] event:', error.message) })
+    repo: e.repo ?? null,
+  }).then(({ error }) => noteResult('event', error))
 }
 
 export function pushDailyLog(userId: string, l: Omit<DailyLog, 'id'>) {
@@ -114,7 +146,7 @@ export function pushDailyLog(userId: string, l: Omit<DailyLog, 'id'>) {
     what_i_learned: l.whatILearned,
     energy_level: l.energyLevel,
     mood: l.mood,
-  }, { onConflict: 'user_id,log_date' }).then(({ error }) => { if (error) console.warn('[sync] daily log:', error.message) })
+  }, { onConflict: 'user_id,log_date' }).then(({ error }) => noteResult('daily log', error))
 }
 
 export function pushChangelog(userId: string, c: Omit<ChangelogEntry, 'id' | 'publishedAt'>) {
@@ -124,23 +156,24 @@ export function pushChangelog(userId: string, c: Omit<ChangelogEntry, 'id' | 'pu
     version_tag: c.versionTag ?? null,
     title: c.title,
     body: c.body,
-  }).then(({ error }) => { if (error) console.warn('[sync] changelog:', error.message) })
+  }).then(({ error }) => noteResult('changelog', error))
 }
 
 // Payments are recorded even for visitors who aren't signed in —
-// the row carries the email from the Paystack receipt.
-export function recordPayment(p: { email: string; amountKobo: number; tier: string; cycle: string; reference?: string }) {
+// the row carries the email from the Paystack receipt. amountMinor is the
+// smallest unit of whichever currency was charged (kobo for ₦, cents for $).
+export function recordPayment(p: { email: string; amountMinor: number; currency: 'NGN' | 'USD'; tier: string; cycle: string; reference?: string }) {
   if (!supabase) return
   supabase.auth.getUser().then(({ data }) => {
     supabase!.from('payments').insert({
       user_id: data.user?.id ?? null,
       email: p.email,
-      amount_kobo: p.amountKobo,
-      currency: 'NGN',
+      amount_kobo: p.amountMinor,
+      currency: p.currency,
       tier: p.tier,
       cycle: p.cycle,
       paystack_ref: p.reference ?? null,
       status: 'success-client',
-    }).then(({ error }) => { if (error) console.warn('[sync] payment:', error.message) })
+    }).then(({ error }) => noteResult('payment', error))
   })
 }

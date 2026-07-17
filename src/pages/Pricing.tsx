@@ -130,32 +130,39 @@ export default function Pricing() {
     setConfirm(q)
   }
 
-  // Step 2 — only after the user confirms the exact amount do we charge.
+  // Step 2 — only after the user confirms the exact amount do we charge,
+  // in the currency THEY chose: naira pays ₦, dollar pays $.
   const pay = async () => {
     if (!confirm) return
     if (!email.includes('@')) { setEmailErr(true); return }
     setPaying(true)
     await loadPaystack()
     const Pop = (window as unknown as { PaystackPop: new () => { newTransaction: (o: Record<string, unknown>) => void } }).PaystackPop
-    // Paystack settles in NGN; that exact naira figure is what we showed and
-    // confirmed. International cards are charged the naira amount by their bank.
+    const amountMinor = (confirm.currency === 'NGN' ? confirm.chargeNgn : confirm.chargeUsd) * 100 // kobo / cents
     new Pop().newTransaction({
       key: PAYSTACK_PUBLIC_KEY,
       email,
-      amount: confirm.chargeNgn * 100, // kobo
-      currency: 'NGN',
+      amount: amountMinor,
+      currency: confirm.currency,
       metadata: { tier: confirm.tier, cycle: confirm.cycle },
       onSuccess: (tx: { reference?: string }) => {
         // Activate EXACTLY the plan they paid for, and sync the tier to cloud.
         updateProfile({ tier: confirm.tier === 'CEO Mode' ? 'team' : 'pro' })
-        recordPayment({ email, amountKobo: confirm.chargeNgn * 100, tier: confirm.tier, cycle: confirm.cycle, reference: tx?.reference })
-        track('payment_success', { tier: confirm.tier, cycle: confirm.cycle })
+        recordPayment({ email, amountMinor, currency: confirm.currency, tier: confirm.tier, cycle: confirm.cycle, reference: tx?.reference })
+        track('payment_success', { tier: confirm.tier, cycle: confirm.cycle, currency: confirm.currency })
         setPaying(false)
         setConfirm(null)
         setPayMsg(`Payment confirmed — ${confirm.tier} is now active. 🎉`)
         setTimeout(() => setPayMsg(null), 4000)
       },
       onCancel: () => { setPaying(false) },
+      onError: () => {
+        setPaying(false)
+        setPayMsg(confirm.currency === 'USD'
+          ? "Dollar charge didn't go through — your Paystack account may not have USD enabled yet. Switch to 🇳🇬 Naira and try again."
+          : 'Payment failed — nothing was charged. Please try again.')
+        setTimeout(() => setPayMsg(null), 5000)
+      },
     })
   }
 
@@ -304,15 +311,28 @@ export default function Pricing() {
                     <span className="font-semibold text-primary">{confirm.tier}</span>
                     <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-secondary">{confirm.cycle}</span>
                   </div>
-                  {/* Exact charged amount — naira is what Paystack settles */}
+                  {/* Exact charged amount, in the currency the user chose */}
                   <div className="mt-3 flex items-baseline gap-2">
-                    <span className="font-mono text-3xl font-bold text-primary">₦{confirm.chargeNgn.toLocaleString()}</span>
-                    <span className="text-sm text-secondary">≈ ${confirm.chargeUsd.toLocaleString()}</span>
+                    {confirm.currency === 'NGN' ? (
+                      <>
+                        <span className="font-mono text-3xl font-bold text-primary">₦{confirm.chargeNgn.toLocaleString()}</span>
+                        <span className="text-sm text-secondary">≈ ${confirm.chargeUsd.toLocaleString()}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-mono text-3xl font-bold text-primary">${confirm.chargeUsd.toLocaleString()}</span>
+                        <span className="text-sm text-secondary">≈ ₦{confirm.chargeNgn.toLocaleString()}</span>
+                      </>
+                    )}
                   </div>
                   <div className="mt-1 text-[11px] text-muted">
-                    {confirm.cycle === 'yearly'
-                      ? `Billed once for the year — ₦${confirm.perMonthNgn.toLocaleString()}/mo × 12 (≈ $${confirm.perMonthUsd.toLocaleString()}/mo).`
-                      : `Billed monthly — ₦${confirm.perMonthNgn.toLocaleString()} (≈ $${confirm.perMonthUsd.toLocaleString()}) each month.`}
+                    {confirm.currency === 'NGN'
+                      ? (confirm.cycle === 'yearly'
+                          ? `Billed once for the year — ₦${confirm.perMonthNgn.toLocaleString()}/mo × 12.`
+                          : `Billed monthly — ₦${confirm.perMonthNgn.toLocaleString()} each month.`)
+                      : (confirm.cycle === 'yearly'
+                          ? `Billed once for the year — $${confirm.perMonthUsd.toLocaleString()}/mo × 12.`
+                          : `Billed monthly — $${confirm.perMonthUsd.toLocaleString()} each month.`)}
                   </div>
                 </div>
 
@@ -333,10 +353,10 @@ export default function Pricing() {
                   disabled={paying}
                   className="sheen mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3 text-sm font-semibold text-white shadow-[0_0_28px_rgba(99,102,241,0.4)] disabled:opacity-60"
                 >
-                  {paying ? 'Opening secure checkout…' : `Confirm & pay ₦${confirm.chargeNgn.toLocaleString()}`}
+                  {paying ? 'Opening secure checkout…' : `Confirm & pay ${confirm.currency === 'NGN' ? `₦${confirm.chargeNgn.toLocaleString()}` : `$${confirm.chargeUsd.toLocaleString()}`}`}
                 </motion.button>
                 <div className="mt-3 flex items-center justify-center gap-1.5 text-[10.5px] text-muted">
-                  <ShieldCheck size={12} className="text-success" /> Secure checkout by Paystack · charged in naira · international cards welcome
+                  <ShieldCheck size={12} className="text-success" /> Secure checkout by Paystack · charged in {confirm.currency === 'NGN' ? 'naira (₦)' : 'US dollars ($)'}
                 </div>
                 <p className="mt-1 text-center text-[10.5px] text-muted">Your plan activates only after payment succeeds.</p>
               </motion.div>

@@ -47,27 +47,55 @@ function categorize(msg: string): EventCategory {
   return 'commit'
 }
 
+export interface GithubRepo { name: string; full_name: string; pushed_at: string; private: boolean }
+
+// The user's most recently pushed repos — feeds the sync AND the repo picker.
+// With a token we use /user/repos so private repos are included too.
+export async function fetchGithubRepos(conn: GithubConn, limit = 6): Promise<GithubRepo[]> {
+  const { user, token } = conn
+  const url = token
+    ? `${API}/user/repos?sort=pushed&per_page=${limit}&affiliation=owner`
+    : `${API}/users/${encodeURIComponent(user)}/repos?sort=pushed&per_page=${limit}`
+  const res = await fetch(url, { headers: headers(token) })
+  if (!res.ok) throw new Error(friendlyError(res.status))
+  return res.json()
+}
+
 // Pull recent commits + releases as ship events (newest first, deduped).
+// NOTE: we deliberately do NOT use the /users/:u/events feed — GitHub's public
+// events API stopped including commit details in PushEvent payloads, so a sync
+// built on it "succeeds" while importing nothing. The repo commits API always
+// returns full messages, so we walk the recently-pushed repos instead.
 export async function fetchGithubShips(conn: GithubConn, sinceDays = 30): Promise<ShipEvent[]> {
   const { user, token } = conn
-  // With a token, authenticated-as-you includes private activity; without, the
-  // same endpoint returns public events. One call, works both ways.
-  const res = await fetch(`${API}/users/${encodeURIComponent(user)}/events?per_page=100`, { headers: headers(token) })
-  if (!res.ok) throw new Error(friendlyError(res.status))
-  const raw = (await res.json()) as GithubEvent[]
-  const cutoff = Date.now() - sinceDays * 864e5
+  const cutoffMs = Date.now() - sinceDays * 864e5
+  const since = new Date(cutoffMs).toISOString()
+  const repos = (await fetchGithubRepos(conn, 6)).filter(r => new Date(r.pushed_at).getTime() >= cutoffMs)
   const out: ShipEvent[] = []
 
-  for (const ev of raw) {
-    const when = new Date(ev.created_at).getTime()
-    if (when < cutoff) continue
-    const repo = (ev.repo?.name ?? '').split('/').pop() ?? 'repo'
-
-    if (ev.type === 'PushEvent' && ev.payload?.commits) {
-      for (const c of ev.payload.commits) {
-        const msg = (c.message ?? '').split('\n')[0].trim()
+  await Promise.all(repos.map(async r => {
+    const repo = r.name
+    // Commits authored by the user in this repo since the cutoff. If the
+    // author filter finds nothing (common when local git email isn't linked
+    // to the GitHub account), fall back to ALL commits in the window — these
+    // are the user's own repos, so for a solo builder they're their commits.
+    let commits: GithubCommit[] = []
+    const cRes = await fetch(
+      `${API}/repos/${r.full_name}/commits?author=${encodeURIComponent(user)}&since=${since}&per_page=60`,
+      { headers: headers(token) },
+    )
+    if (cRes.ok) commits = (await cRes.json()) as GithubCommit[]
+    if (commits.length === 0) {
+      const allRes = await fetch(`${API}/repos/${r.full_name}/commits?since=${since}&per_page=60`, { headers: headers(token) })
+      if (allRes.ok) commits = (await allRes.json()) as GithubCommit[]
+    }
+    {
+      for (const c of commits) {
+        const msg = (c.commit?.message ?? '').split('\n')[0].trim()
         // Skip auto-merge noise — it's not a story worth posting about.
         if (!msg || /^merge (branch|pull request|remote)/i.test(msg)) continue
+        const when = c.commit?.author?.date ?? c.commit?.committer?.date
+        if (!when || new Date(when).getTime() < cutoffMs) continue
         out.push({
           id: `gh_${c.sha}`,
           source: 'github',
@@ -76,25 +104,34 @@ export async function fetchGithubShips(conn: GithubConn, sinceDays = 30): Promis
           description: `\`${c.sha.slice(0, 7)}\` · ${repo}`,
           importance: 5,
           isPinned: false,
-          eventDate: ev.created_at.slice(0, 10),
-          eventTime: ev.created_at,
+          eventDate: when.slice(0, 10),
+          eventTime: when,
+          repo,
         })
       }
-    } else if (ev.type === 'ReleaseEvent' && ev.payload?.release) {
-      const rel = ev.payload.release
-      out.push({
-        id: `gh_rel_${rel.id}`,
-        source: 'github',
-        category: 'deployment',
-        title: `Released ${rel.tag_name ?? rel.name ?? ''} · ${repo}`.trim(),
-        description: (rel.body ?? '').slice(0, 240).trim() || undefined,
-        importance: 8,
-        isPinned: false,
-        eventDate: ev.created_at.slice(0, 10),
-        eventTime: ev.created_at,
-      })
     }
-  }
+    // Releases in the window → deployment events
+    const relRes = await fetch(`${API}/repos/${r.full_name}/releases?per_page=5`, { headers: headers(token) })
+    if (relRes.ok) {
+      const rels = (await relRes.json()) as GithubRelease[]
+      for (const rel of rels) {
+        const when = rel.published_at ?? rel.created_at
+        if (!when || new Date(when).getTime() < cutoffMs) continue
+        out.push({
+          id: `gh_rel_${rel.id}`,
+          source: 'github',
+          category: 'deployment',
+          title: `Released ${rel.tag_name ?? rel.name ?? ''} · ${repo}`.trim(),
+          description: (rel.body ?? '').slice(0, 240).trim() || undefined,
+          importance: 8,
+          isPinned: false,
+          eventDate: when.slice(0, 10),
+          eventTime: when,
+          repo,
+        })
+      }
+    }
+  }))
 
   const seen = new Set<string>()
   return out
@@ -102,13 +139,25 @@ export async function fetchGithubShips(conn: GithubConn, sinceDays = 30): Promis
     .sort((a, b) => b.eventTime.localeCompare(a.eventTime))
 }
 
-// Minimal shapes for the slice of the GitHub events API we touch.
-interface GithubEvent {
-  type: string
-  created_at: string
-  repo?: { name: string }
-  payload?: {
-    commits?: { sha: string; message: string }[]
-    release?: { id: number; tag_name?: string; name?: string; body?: string }
-  }
+// Which repo a ship belongs to. Newer synced events carry e.repo; older ones
+// only have it embedded in the description ("`abc1234` · repo-name").
+export function repoOf(e: ShipEvent): string | null {
+  if (e.repo) return e.repo
+  if (e.source !== 'github') return null
+  const m = e.description?.match(/`[0-9a-f]{7}` · (\S+)/)
+  return m ? m[1] : null
+}
+
+// Minimal shapes for the slices of the GitHub API we touch.
+interface GithubCommit {
+  sha: string
+  commit?: { message?: string; author?: { date?: string }; committer?: { date?: string } }
+}
+interface GithubRelease {
+  id: number
+  tag_name?: string
+  name?: string
+  body?: string
+  published_at?: string
+  created_at?: string
 }

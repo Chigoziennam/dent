@@ -8,6 +8,7 @@ import { SOURCE_LABEL, CATEGORY_META, levelForXP, type Mood, type EventCategory 
 import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill, AICore } from '../components/ui'
 import { AddEventModal } from '../components/AddEventModal'
 import { Mascot } from '../components/Mascot'
+import { repoOf } from '../lib/github'
 
 // Builder moods — words first, not emoji soup
 const MOODS: { key: Mood; label: string; emoji: string }[] = [
@@ -183,11 +184,19 @@ export default function Today() {
     setTimeout(() => setXpFloat(false), 1600)
   }
 
+  // Which repos shipped today (from GitHub-synced events) — lets the builder
+  // focus the post on one project instead of everything at once.
+  const todaysRepos = useMemo(
+    () => [...new Set(todaysEvents.map(repoOf).filter((r): r is string => !!r))],
+    [todaysEvents],
+  )
+  const [focusRepo, setFocusRepo] = useState<string | null>(null)
+
   // Hand today's ships straight to the writer — it opens on the "Today" range
   // so the post is analyzed from exactly what you shipped (commit + deploy and
-  // all) rather than a whole week of noise.
+  // all) rather than a whole week of noise. A chosen repo rides along.
   const postToday = () => {
-    sessionStorage.setItem('shiplog-handoff', JSON.stringify({ mode: 'ships', range: 0, tone: profile.tone }))
+    sessionStorage.setItem('shiplog-handoff', JSON.stringify({ mode: 'ships', range: 0, tone: profile.tone, repo: focusRepo }))
     navigate('/app/write')
   }
 
@@ -569,21 +578,41 @@ export default function Today() {
       {/* Turn today's log into a post — the whole point of capturing it */}
       <AnimatePresence>
         {todaysEvents.length > 0 && (
-          <motion.button
+          <motion.div
             initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            whileTap={{ scale: 0.99 }}
-            onClick={postToday}
-            className="sheen mt-4 flex w-full items-center gap-3 rounded-2xl border border-accent/40 bg-accent/[0.08] p-4 text-left"
+            className="sheen mt-4 rounded-2xl border border-accent/40 bg-accent/[0.08] p-4"
           >
-            <span className="shrink-0"><AICore size={26} color="#a5b4fc" /></span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-primary">Turn today's {todaysEvents.length} {todaysEvents.length === 1 ? 'ship' : 'ships'} into a post</div>
-              <div className="text-xs text-secondary">
-                The AI reads exactly what you shipped today — {[...new Set(todaysEvents.map(e => CATEGORY_META[e.category].label.toLowerCase()))].slice(0, 3).join(', ')} — and writes the story behind it.
+            <button type="button" onClick={postToday} className="flex w-full items-center gap-3 text-left">
+              <span className="shrink-0"><AICore size={26} color="#a5b4fc" /></span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-primary">Turn today's {todaysEvents.length} {todaysEvents.length === 1 ? 'ship' : 'ships'} into a post</div>
+                <div className="text-xs text-secondary">
+                  The AI reads exactly what you shipped today — {[...new Set(todaysEvents.map(e => CATEGORY_META[e.category].label.toLowerCase()))].slice(0, 3).join(', ')} — and writes the story behind it.
+                </div>
               </div>
-            </div>
-            <span className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white">Write it →</span>
-          </motion.button>
+              <span className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white">Write it →</span>
+            </button>
+            {/* Repo focus — talk about ONE project, or everything */}
+            {todaysRepos.length > 0 && (
+              <div className="no-scrollbar mt-3 flex items-center gap-1.5 overflow-x-auto border-t border-white/5 pt-3">
+                <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted">Focus</span>
+                <button
+                  type="button" onClick={() => setFocusRepo(null)}
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${focusRepo === null ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}
+                >
+                  Everything
+                </button>
+                {todaysRepos.map(r => (
+                  <button
+                    key={r} type="button" onClick={() => setFocusRepo(focusRepo === r ? null : r)}
+                    className={`shrink-0 rounded-full border px-2.5 py-1 font-mono text-[11px] ${focusRepo === r ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            )}
+          </motion.div>
         )}
       </AnimatePresence>
 

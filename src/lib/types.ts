@@ -33,6 +33,7 @@ export interface ShipEvent {
   isPinned: boolean
   eventDate: string // yyyy-MM-dd
   eventTime: string // ISO
+  repo?: string // which repo this came from (GitHub-synced events)
 }
 
 export interface DailyLog {

@@ -101,14 +101,17 @@ function checkAchievements(state: Pick<DentState, 'events' | 'dailyLogs' | 'cont
   return { unlocked, newCode, bonusXP }
 }
 
-// Union two event lists by id — local edits win on conflict, order by newest.
+// Union two event lists — local edits win on conflict, order by newest.
 // This is what makes a returning user NEVER lose data: cloud and local merge,
-// neither side clobbers the other.
+// neither side clobbers the other. Keyed by content (time+title), NOT id:
+// cloud rows come back with server-generated uuids that never match the local
+// ids (ev_<ts>, gh_<sha>), so an id-keyed merge would duplicate every ship.
 function mergeEvents(local: ShipEvent[], cloud: ShipEvent[]): ShipEvent[] {
-  const byId = new Map<string, ShipEvent>()
-  for (const e of cloud) byId.set(e.id, e)
-  for (const e of local) byId.set(e.id, e) // local overwrites same id
-  return [...byId.values()].sort((a, b) => (b.eventTime || '').localeCompare(a.eventTime || ''))
+  const key = (e: ShipEvent) => `${e.eventTime}|${e.title}`
+  const byKey = new Map<string, ShipEvent>()
+  for (const e of cloud) byKey.set(key(e), e)
+  for (const e of local) byKey.set(key(e), e) // local overwrites same content
+  return [...byKey.values()].sort((a, b) => (b.eventTime || '').localeCompare(a.eventTime || ''))
 }
 
 function mergeLogs(local: DailyLog[], cloud: DailyLog[]): DailyLog[] {
@@ -232,7 +235,11 @@ export const useDent = create<DentState>()(
                 projectTagline: (cp.current_project_tagline as string) ?? st.profile.projectTagline,
                 startStage: (cp.start_stage as Profile['startStage']) ?? st.profile.startStage,
                 tier: (cp.tier as Profile['tier']) ?? st.profile.tier,
+                // A cloud profile with a project name means this person already
+                // did the initial steps — NEVER send them through onboarding or
+                // the tour again, on any browser or device.
                 onboarded: Boolean(cp.current_project_name) || st.profile.onboarded,
+                tourDone: Boolean(cp.current_project_name) || st.profile.tourDone,
               },
             }))
           }

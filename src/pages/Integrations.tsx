@@ -5,6 +5,7 @@ import { Check, Shield, Workflow, Database, Bot, FileDown, KeyRound, ExternalLin
 import { useDent } from '../lib/store'
 import { CATEGORY_META } from '../lib/types'
 import { supabaseReady } from '../lib/supabase'
+import { checkCloudHealth, syncHealth } from '../lib/sync'
 import { verifyGithub, fetchGithubShips, type GithubAccount } from '../lib/github'
 import { Page, SectionTitle } from '../components/ui'
 
@@ -30,6 +31,11 @@ export default function Integrations() {
 
   const ghConnected = Boolean(creds.githubUser)
   const notify = (msg: string, kind: 'ok' | 'err' = 'ok') => { setToast({ msg, kind }); setTimeout(() => setToast(null), 3200) }
+
+  // Is the cloud ACTUALLY reachable? A deleted/paused Supabase project must
+  // show up as a loud red warning, not a quiet green "Connected".
+  const [cloud, setCloud] = useState<'checking' | 'ok' | 'unreachable' | 'unconfigured'>('checking')
+  useEffect(() => { checkCloudHealth().then(setCloud) }, [])
 
   // On load, silently re-verify a saved GitHub connection so "Connected" is
   // always the truth, not a stale flag.
@@ -188,24 +194,42 @@ export default function Integrations() {
 
         {/* Account & cloud — honest status, no fake toggles */}
         <motion.div variants={{ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }}
-          className="glass p-5" style={userId ? { borderColor: 'rgba(99,102,241,0.35)' } : undefined}>
+          className="glass p-5"
+          style={cloud === 'unreachable' ? { borderColor: 'rgba(239,68,68,0.5)', boxShadow: '0 0 28px rgba(239,68,68,0.08)' } : userId ? { borderColor: 'rgba(99,102,241,0.35)' } : undefined}>
           <div className="flex items-center justify-between">
             <span className="text-2xl">☁️</span>
-            {userId
-              ? <span className="flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-[11px] font-semibold text-success"><Check size={11} /> Syncing</span>
-              : <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-muted">Local only</span>}
+            {cloud === 'unreachable'
+              ? <span className="flex items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-1 text-[11px] font-semibold text-red-400"><AlertCircle size={11} /> Not backing up</span>
+              : userId
+                ? <span className="flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-[11px] font-semibold text-success"><Check size={11} /> Syncing</span>
+                : <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-muted">Local only</span>}
           </div>
           <div className="mt-3 font-semibold">Account & Cloud</div>
-          <p className="mt-1 text-xs leading-relaxed text-secondary">
-            {userId
-              ? 'You’re signed in — every ship, log and post mirrors to the cloud and comes back on any device you sign in on.'
-              : 'You’re working locally. Sign in with GitHub or email to back your log up to the cloud and keep it across devices.'}
-          </p>
+          {cloud === 'unreachable' ? (
+            <p className="mt-1 text-xs leading-relaxed text-red-300">
+              The cloud database can't be reached — your data is only on this device right now, and other browsers won't remember you.
+              Check that the Supabase project still exists and the URL/key in the environment are current.
+            </p>
+          ) : (
+            <p className="mt-1 text-xs leading-relaxed text-secondary">
+              {userId
+                ? 'You’re signed in — every ship, log and post mirrors to the cloud and comes back on any device you sign in on.'
+                : 'You’re working locally. Sign in with GitHub or email to back your log up to the cloud and keep it across devices.'}
+            </p>
+          )}
           <div className="mt-3.5 space-y-2 text-[12px]">
-            <Row icon={Cloud} label="Cloud backend" ok={supabaseReady} okText="Connected" offText="Not configured" />
+            <Row icon={Cloud} label="Cloud backend"
+              ok={supabaseReady && cloud === 'ok'}
+              okText="Connected"
+              offText={cloud === 'checking' ? 'Checking…' : cloud === 'unreachable' ? 'Unreachable' : 'Not configured'} />
             <Row icon={Shield} label="Signed-in account" ok={Boolean(userId)} okText={profile.displayName || 'You'} offText="Not signed in" />
-            <Row icon={Database} label="Events backed up" ok={Boolean(userId) && events.length > 0} okText={`${events.length} events`} offText={`${events.length} local`} />
+            <Row icon={Database} label="Events backed up" ok={Boolean(userId) && cloud === 'ok' && events.length > 0} okText={`${events.length} events`} offText={`${events.length} local`} />
           </div>
+          {syncHealth().error && cloud !== 'unreachable' && (
+            <p className="mt-2 rounded-lg border border-red-500/30 bg-red-500/[0.06] px-2.5 py-1.5 font-mono text-[10px] text-red-300">
+              Last sync error: {syncHealth().error}
+            </p>
+          )}
           <p className="mt-3 text-[10.5px] leading-relaxed text-muted">
             Signing out no longer wipes your data — sign back in with the same account and everything is exactly where you left it.
           </p>

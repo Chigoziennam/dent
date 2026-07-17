@@ -158,10 +158,16 @@ export default function Pricing() {
       onCancel: () => { setPaying(false) },
       onError: () => {
         setPaying(false)
-        setPayMsg(confirm.currency === 'USD'
-          ? "Dollar charge didn't go through — your Paystack account may not have USD enabled yet. Switch to 🇳🇬 Naira and try again."
-          : 'Payment failed — nothing was charged. Please try again.')
-        setTimeout(() => setPayMsg(null), 5000)
+        if (confirm.currency === 'USD') {
+          // USD isn't enabled on this Paystack account (yet) — flip the SAME
+          // confirmation to naira so the buyer can finish in one tap instead
+          // of hitting a dead end. Amount shown updates before any charge.
+          setConfirm(c => (c ? { ...c, currency: 'NGN' } : c))
+          setPayMsg(`Dollar charges aren't enabled yet — switched you to naira: ₦${confirm.chargeNgn.toLocaleString()} (same plan). Confirm again to pay.`)
+        } else {
+          setPayMsg('Payment failed — nothing was charged. Please try again.')
+        }
+        setTimeout(() => setPayMsg(null), 6000)
       },
     })
   }

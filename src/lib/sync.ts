@@ -111,7 +111,10 @@ export async function fetchCloudData(userId: string): Promise<{ events: ShipEven
 
 export function pushProfile(userId: string, p: Partial<Profile> & { email?: string; startStage?: string }) {
   if (!supabase) return
-  supabase.from('profiles').upsert({
+  // Core identity — columns that exist in every schema version. These MUST
+  // land: current_project_name is what tells a future login "this person
+  // already onboarded, welcome them back".
+  const core = {
     id: userId,
     ...(p.username ? { username: p.username } : {}),
     ...(p.displayName ? { display_name: p.displayName } : {}),
@@ -119,11 +122,25 @@ export function pushProfile(userId: string, p: Partial<Profile> & { email?: stri
     ...(p.bio !== undefined ? { bio: p.bio } : {}),
     ...(p.projectName ? { current_project_name: p.projectName } : {}),
     ...(p.projectTagline !== undefined ? { current_project_tagline: p.projectTagline } : {}),
-    ...(p.startStage ? { start_stage: p.startStage } : {}),
-    ...(p.email ? { email: p.email } : {}),
     ...(p.tier ? { tier: p.tier } : {}),
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' }).then(({ error }) => noteResult('profile', error))
+  }
+  // Newer columns (upgrade-payments-accounts.sql). If the DB hasn't run that
+  // migration yet, the full upsert fails with 42703 — retry with core only so
+  // one missing column can never wipe out the whole profile save again.
+  const full = {
+    ...core,
+    ...(p.startStage ? { start_stage: p.startStage } : {}),
+    ...(p.email ? { email: p.email } : {}),
+  }
+  supabase.from('profiles').upsert(full, { onConflict: 'id' }).then(({ error }) => {
+    if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message))) {
+      console.error('[sync] profile: DB is missing newer columns — run supabase/upgrade-payments-accounts.sql. Saving core fields only.')
+      supabase!.from('profiles').upsert(core, { onConflict: 'id' }).then(({ error: e2 }) => noteResult('profile', e2))
+    } else {
+      noteResult('profile', error)
+    }
+  })
 }
 
 export function pushEvent(userId: string, e: ShipEvent) {

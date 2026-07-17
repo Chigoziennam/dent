@@ -178,10 +178,18 @@ export default function Today() {
   const [mood, setMood] = useState<Mood>(existingLog?.mood ?? 'good')
   const [reflectOpen, setReflectOpen] = useState(hour >= 18 && !existingLog)
 
+  const [sealedToast, setSealedToast] = useState<string | null>(null)
   const saveReflection = () => {
+    const firstSealToday = !existingLog
     saveDailyLog({ logDate: today, whatIBuilt: built, whatBlockedMe: blocked, whatILearned: learned, energyLevel: energy, mood })
-    setXpFloat(true)
-    setTimeout(() => setXpFloat(false), 1600)
+    // XP floats only when the day is sealed for the FIRST time — updates
+    // don't re-award. Either way the save is confirmed loudly.
+    if (firstSealToday) {
+      setXpFloat(true)
+      setTimeout(() => setXpFloat(false), 1600)
+    }
+    setSealedToast(firstSealToday ? 'Day sealed ✓ +25 XP — see you tomorrow' : 'Log updated ✓ Saved')
+    setTimeout(() => setSealedToast(null), 2600)
   }
 
   // Which repos shipped today (from GitHub-synced events) — lets the builder
@@ -542,7 +550,7 @@ export default function Today() {
                       </div>
                     </div>
                   </div>
-                  <div className="relative">
+                  <div className="relative flex items-center gap-3">
                     <motion.button
                       whileTap={{ scale: 0.97 }}
                       onClick={saveReflection}
@@ -551,11 +559,21 @@ export default function Today() {
                       {existingLog ? 'Update the log' : 'Close out the day · +25 XP'}
                     </motion.button>
                     <AnimatePresence>
+                      {sealedToast && (
+                        <motion.span
+                          initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
+                          className="flex items-center gap-1.5 text-[13px] font-semibold text-success"
+                        >
+                          <Checkmark /> {sealedToast}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                    <AnimatePresence>
                       {xpFloat && (
                         <motion.span
                           initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -30 }} exit={{ opacity: 0 }}
                           transition={{ duration: 1.5 }}
-                          className="absolute left-1/2 top-0 font-mono text-sm font-bold text-accent"
+                          className="absolute left-16 top-0 font-mono text-sm font-bold text-accent"
                         >
                           +25 XP
                         </motion.span>

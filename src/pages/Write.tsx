@@ -76,6 +76,18 @@ export default function Write() {
     () => inRange.filter(e => !focusRepo || e.source !== 'github' || repoOf(e) === focusRepo),
     [inRange, focusRepo],
   )
+  // Hand-picking: every ship in range is IN by default; tap one to leave it
+  // out. This is how you talk about exactly the commits you choose — the
+  // site offers them, you decide.
+  const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  useEffect(() => { setExcluded(new Set()) }, [range, focusRepo])
+  const toggleShip = (id: string) => setExcluded(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const activeEvents = useMemo(() => rangeEvents.filter(e => !excluded.has(e.id)), [rangeEvents, excluded])
   const rangeLogs = useMemo(() => dailyLogs.filter(l => l.logDate >= cutoff), [dailyLogs, cutoff])
 
   const pickPlatform = (p: { key: ContentPlatform; pro?: boolean }) => {
@@ -101,6 +113,12 @@ export default function Write() {
       setGate(`${PLATFORMS.find(p => p.key === platform)?.label} is a CEO Mode output. Upgrade to publish there.`)
       return
     }
+    if (mode === 'ships' && activeEvents.length === 0) {
+      setGate(rangeEvents.length === 0
+        ? 'No ships in this range yet — log something or sync GitHub first.'
+        : "Every ship is excluded — tap some back on so there's a story to tell.")
+      return
+    }
     if (!tryUseAI()) {
       setGate(`You've used all ${ent.aiPerWeek} free AI generations this week. Go Pro for unlimited.`)
       return
@@ -115,7 +133,7 @@ export default function Write() {
             state, platform, tone, projectName: profile.projectName,
           })
         : await generateContent({
-            events: rangeEvents, dailyLogs: rangeLogs, platform, tone,
+            events: activeEvents, dailyLogs: rangeLogs, platform, tone,
             projectName: profile.projectName, projectTagline: profile.projectTagline,
           })
     setBody(text)
@@ -179,7 +197,7 @@ export default function Write() {
           {mode === 'ships' ? (
             <div className="glass p-5">
               <button onClick={() => setContextOpen(o => !o)} className="flex w-full items-center justify-between lg:pointer-events-none">
-                <SectionTitle>Source Material · {rangeEvents.length} events</SectionTitle>
+                <SectionTitle>Source Material · {activeEvents.length}{excluded.size > 0 ? ` of ${rangeEvents.length}` : ''} events</SectionTitle>
                 <ChevronDown size={14} className={`text-muted transition-transform lg:hidden ${contextOpen ? 'rotate-180' : ''}`} />
               </button>
               {/* Repo focus — write about one project or the whole log */}
@@ -203,13 +221,21 @@ export default function Write() {
                 </div>
               )}
               <div className={`space-y-2 ${contextOpen ? '' : 'hidden lg:block'}`}>
-                {rangeEvents.slice(0, 14).map(e => (
-                  <div key={e.id} className="flex items-center gap-2 rounded-lg border border-line bg-white/[0.02] px-3 py-2">
-                    <CategoryPill category={e.category} />
-                    <span className="truncate text-xs text-secondary">{e.title}</span>
-                  </div>
-                ))}
-                {rangeEvents.length > 14 && <div className="pt-1 text-center font-mono text-[11px] text-muted">+ {rangeEvents.length - 14} more feeding the AI</div>}
+                <div className="pb-1 text-[10.5px] text-muted">Tap a ship to leave it out — the post only uses what's lit.</div>
+                {rangeEvents.slice(0, 20).map(e => {
+                  const out = excluded.has(e.id)
+                  return (
+                    <button
+                      key={e.id} type="button" onClick={() => toggleShip(e.id)}
+                      className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all ${out ? 'border-line/50 bg-transparent opacity-40' : 'border-line bg-white/[0.02]'}`}
+                    >
+                      <CategoryPill category={e.category} />
+                      <span className={`truncate text-xs ${out ? 'text-muted line-through' : 'text-secondary'}`}>{e.title}</span>
+                      {repoOf(e) && <span className="ml-auto shrink-0 font-mono text-[9.5px] text-muted">{repoOf(e)}</span>}
+                    </button>
+                  )
+                })}
+                {rangeEvents.length > 20 && <div className="pt-1 text-center font-mono text-[11px] text-muted">+ {rangeEvents.length - 20} more feeding the AI</div>}
               </div>
             </div>
           ) : mode === 'fusion' ? (

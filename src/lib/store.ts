@@ -203,7 +203,9 @@ export const useDent = create<DentState>()(
           })
         }
         // Mirror down whatever the cloud already knows and MERGE it with local —
-        // union by id / date, so nothing on either side is lost.
+        // union by id / date, so nothing on either side is lost. Then push the
+        // other direction: anything this device has that the cloud is missing
+        // goes UP, so the account is whole no matter where you sign in next.
         try {
           const [cp, data] = await Promise.all([fetchCloudProfile(user.id), fetchCloudData(user.id)])
           if (data && (data.events.length > 0 || data.dailyLogs.length > 0)) {
@@ -223,6 +225,23 @@ export const useDent = create<DentState>()(
                 },
               }
             })
+          }
+          // Backfill UP: local ships/logs the cloud doesn't have yet — work
+          // logged while offline, or while an earlier cloud save was failing.
+          {
+            const st = get()
+            const evKey = (e: ShipEvent) => `${e.eventTime}|${e.title}`
+            const cloudEv = new Set((data?.events ?? []).map(evKey))
+            st.events.filter(e => !cloudEv.has(evKey(e))).slice(0, 300)
+              .forEach(e => pushEvent(user.id, e))
+            const cloudDl = new Set((data?.dailyLogs ?? []).map(l => l.logDate))
+            st.dailyLogs.filter(l => !cloudDl.has(l.logDate)).slice(0, 120)
+              .forEach(l => pushDailyLog(user.id, l))
+            // Re-assert the profile too — if it ever failed to save (e.g. a
+            // missing DB column), this is what finally makes the cloud whole.
+            if (st.profile.onboarded && st.profile.projectName) {
+              pushProfile(user.id, { ...st.profile, email: st.profile.email })
+            }
           }
           if (cp) {
             set(st => ({

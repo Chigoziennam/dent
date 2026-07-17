@@ -29,14 +29,20 @@ function noteResult(scope: string, error: { message: string } | null) {
 
 // Can we actually reach the Supabase project? A deleted/paused project fails
 // DNS entirely — fetch throws — which is different from an RLS/schema error.
+// ANY HTTP response (even 401) means the project is alive and reachable;
+// only a thrown fetch (DNS/timeout) means it's truly gone.
 export async function checkCloudHealth(): Promise<'ok' | 'unreachable' | 'unconfigured'> {
   const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
   if (!url || !supabase) return 'unconfigured'
   try {
-    const res = await fetch(`${url.replace(/\/$/, '')}/auth/v1/health`, { signal: AbortSignal.timeout(6000) })
-    return res.ok ? 'ok' : 'unreachable'
+    await fetch(`${url.replace(/\/$/, '')}/auth/v1/health`, {
+      headers: anon ? { apikey: anon } : undefined,
+      signal: AbortSignal.timeout(8000),
+    })
+    return 'ok'
   } catch {
-    lastSyncError = 'Supabase project unreachable — check the project still exists'
+    lastSyncError = 'Supabase project unreachable — check your connection or that the project still exists'
     return 'unreachable'
   }
 }

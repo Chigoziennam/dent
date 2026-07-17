@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send, Sparkles } from 'lucide-react'
 import { useDent } from '../lib/store'
 import { copilotAnswer, copilotBriefing, aiMode, SHIPPER_QUOTES } from '../lib/ai'
+import { AICore } from './ui'
 
 interface Msg { role: 'user' | 'copilot'; text: string }
 
@@ -80,8 +81,8 @@ export function Copilot() {
         }}
         aria-label="Open co-pilot"
       >
-        <motion.span animate={{ rotate: open ? 90 : 0 }} className="text-xl">
-          {open ? <X size={20} className="text-white" /> : '🤖'}
+        <motion.span animate={{ rotate: open ? 90 : 0 }} className="flex items-center justify-center">
+          {open ? <X size={20} className="text-white" /> : <AICore size={30} />}
         </motion.span>
         {/* attention ping until the first briefing is read */}
         {!open && !briefed.current && (
@@ -113,7 +114,7 @@ export function Copilot() {
             {/* Header */}
             <div className="border-b border-line px-4 py-3">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/20 text-base">🤖</span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/20"><AICore size={22} color="#a5b4fc" /></span>
                 <div className="min-w-0">
                   <div className="text-[13px] font-bold">Co-pilot</div>
                   <div className="text-[10px] text-muted">

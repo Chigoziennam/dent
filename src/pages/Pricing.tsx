@@ -5,6 +5,8 @@ import { Check, ArrowLeft, Crown } from 'lucide-react'
 import { SpaceBackdrop, Logo } from '../components/ui'
 import { useDent } from '../lib/store'
 import { track } from '../lib/telemetry'
+import { PAYSTACK_PUBLIC_KEY, paystackReady } from '../lib/payments'
+import { recordPayment } from '../lib/sync'
 
 type Currency = 'NGN' | 'USD'
 
@@ -25,12 +27,9 @@ function detectCurrency(): Currency {
   return 'USD'
 }
 
-// Paystack inline checkout — loads their script once, pays to YOUR account.
-// The founder's PUBLIC key ships with the build via env; every user's payment
-// settles straight to the founder's Paystack balance → bank account.
-// (Public keys are safe client-side. The SECRET key never leaves the server —
-// the n8n payment-confirmer verifies transactions with it.)
-const FOUNDER_PAYSTACK_KEY = (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string | undefined)?.trim() || undefined
+// Paystack inline checkout — loads their script once, pays to the founder's
+// account. The public key is hardwired in src/lib/payments.ts (no env vars);
+// the SECRET key never touches the app — it lives only in n8n.
 let paystackLoading: Promise<void> | null = null
 function loadPaystack(): Promise<void> {
   if (paystackLoading) return paystackLoading
@@ -95,17 +94,15 @@ export default function Pricing() {
   const [yearly, setYearly] = useState(false)
   const [currency, setCurrency] = useState<Currency>(detectCurrency())
   const [payMsg, setPayMsg] = useState<string | null>(null)
-  const { creds, updateProfile } = useDent()
+  const { updateProfile } = useDent()
 
   useEffect(() => { track('plan_viewed', { currency }) }, [currency])
 
-  // Real checkout when the founder's Paystack key is set and we're in NGN
+  // Real checkout — key is hardwired, money settles to the founder's account
   const checkout = async (tierName: string) => {
     const amount = PRICES[tierName]?.[currency][yearly ? 'y' : 'm'] ?? 0
     if (amount === 0) return
-    // creds key (Settings) overrides for testing; env key is the production default
-    const payKey = creds.paystackPublicKey || FOUNDER_PAYSTACK_KEY
-    if (currency !== 'NGN' || !payKey) {
+    if (currency !== 'NGN' || !paystackReady()) {
       setPayMsg('Card payments go live at launch — Nigerian builders pay in naira via Paystack.')
       setTimeout(() => setPayMsg(null), 3000)
       return
@@ -114,14 +111,19 @@ export default function Pricing() {
     if (!email?.includes('@')) return
     await loadPaystack()
     const Pop = (window as unknown as { PaystackPop: new () => { newTransaction: (o: Record<string, unknown>) => void } }).PaystackPop
+    const cycle = yearly ? 'yearly' : 'monthly'
     new Pop().newTransaction({
-      key: payKey,
+      key: PAYSTACK_PUBLIC_KEY,
       email,
       amount: amount * 100, // kobo
       currency: 'NGN',
-      metadata: { tier: tierName, cycle: yearly ? 'yearly' : 'monthly' },
-      onSuccess: () => {
+      metadata: { tier: tierName, cycle },
+      onSuccess: (tx: { reference?: string }) => {
         updateProfile({ tier: tierName === 'CEO Mode' ? 'team' : 'pro' })
+        // Lands in the Supabase `payments` table — visible in your dashboard
+        // instantly; the n8n confirmer verifies it with the secret key after.
+        recordPayment({ email, amountKobo: amount * 100, tier: tierName, cycle, reference: tx?.reference })
+        track('payment_success', { tier: tierName, cycle })
         setPayMsg('Payment received — welcome aboard! Your plan is active. 🎉')
         setTimeout(() => setPayMsg(null), 4000)
       },
@@ -237,7 +239,7 @@ export default function Pricing() {
                     onClick={() => checkout(t.name)}
                     className={`block w-full rounded-xl py-3 text-center text-sm font-semibold ${t.highlight ? 'sheen bg-accent text-white shadow-[0_0_28px_rgba(99,102,241,0.4)]' : 'border border-line text-secondary transition-colors hover:border-line-hover hover:text-primary'}`}
                   >
-                    {t.cta}{currency === 'NGN' && (creds.paystackPublicKey || FOUNDER_PAYSTACK_KEY) ? ' · pay with Paystack' : ''}
+                    {t.cta}{currency === 'NGN' && paystackReady() ? ' · pay with Paystack' : ''}
                   </button>
                 )}
               </motion.div>

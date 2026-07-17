@@ -77,9 +77,14 @@ export interface ChangelogEntry {
 export interface Profile {
   username: string
   displayName: string
+  email?: string       // from auth — receipts + n8n follow-ups
   avatar?: string      // emoji face for the builder
   avatarUrl?: string   // real avatar image (tech portrait / robot / pixel)
   avatarHue?: number   // gradient hue for the avatar ring
+  // Where their story starts — newbies log day 1, veterans log the climb
+  startStage?: 'spark' | 'building' | 'launched'
+  onboarded?: boolean  // finished the first-run questions
+  tourDone?: boolean   // seen the guided walkthrough
   bio: string
   projectName: string
   projectTagline: string

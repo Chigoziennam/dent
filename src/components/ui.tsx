@@ -125,6 +125,49 @@ export function AnimatedAvatar({ src, fallback, hue = 245, size = 40, pulse = tr
   )
 }
 
+// ── AI Core: the co-pilot's face — a living reactor, not an emoji ──
+// Rotating orbit ring + counter-rotating dashes + pulsing plasma heart.
+export function AICore({ size = 22, color = '#fff' }: { size?: number; color?: string }) {
+  return (
+    <motion.svg
+      viewBox="0 0 48 48" width={size} height={size} aria-hidden
+      initial={false}
+    >
+      <defs>
+        <radialGradient id="aiHeart" cx="42%" cy="38%" r="65%">
+          <stop offset="0%" stopColor="#e0e7ff" />
+          <stop offset="45%" stopColor="#a5b4fc" />
+          <stop offset="100%" stopColor="#6366f1" />
+        </radialGradient>
+      </defs>
+      {/* outer orbit — slow spin */}
+      <motion.g
+        animate={{ rotate: 360 }}
+        transition={{ duration: 9, repeat: Infinity, ease: 'linear' }}
+        style={{ originX: '24px', originY: '24px' }}
+      >
+        <ellipse cx="24" cy="24" rx="20" ry="9.5" fill="none" stroke={color} strokeOpacity="0.5" strokeWidth="1.6" />
+        <circle cx="44" cy="24" r="2.6" fill={color} />
+      </motion.g>
+      {/* inner dashes — counter-spin */}
+      <motion.circle
+        cx="24" cy="24" r="13.5" fill="none" stroke={color} strokeOpacity="0.65"
+        strokeWidth="1.6" strokeDasharray="5 7" strokeLinecap="round"
+        animate={{ rotate: -360 }}
+        transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+        style={{ originX: '24px', originY: '24px' }}
+      />
+      {/* plasma heart — breathing */}
+      <motion.circle
+        cx="24" cy="24" r="7.5" fill="url(#aiHeart)"
+        animate={{ scale: [1, 1.18, 1], opacity: [0.9, 1, 0.9] }}
+        transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ originX: '24px', originY: '24px', filter: 'drop-shadow(0 0 6px rgba(165,180,252,0.9))' }}
+      />
+    </motion.svg>
+  )
+}
+
 export function CategoryPill({ category }: { category: EventCategory }) {
   const meta = CATEGORY_META[category]
   return (

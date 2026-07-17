@@ -11,11 +11,10 @@ import { TONE_META, type Tone } from '../lib/types'
 import { Page, GlassCard, SectionTitle, AnimatedAvatar } from '../components/ui'
 
 export default function Settings() {
-  const { profile, updateProfile, logout, aiUsed, creds, setCreds } = useDent()
+  const { profile, updateProfile, logout, aiUsed } = useDent()
   const [form, setForm] = useState(profile)
   const [saved, setSaved] = useState(false)
   const [creditToast, setCreditToast] = useState(false)
-  const [paystackKey, setPaystackKey] = useState(creds.paystackPublicKey ?? '')
   const navigate = useNavigate()
 
   const save = () => {
@@ -183,32 +182,6 @@ export default function Settings() {
           </Link>
         </div>
         {creditToast && <p className="mt-2 text-[11px] text-success">Credit top-ups go live with payments at launch — Paystack confirmer is already wired ✓</p>}
-
-        <div className="mt-4 border-t border-line pt-4">
-          <div className="text-xs font-medium text-secondary">Founder payments — your Paystack public key</div>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted">
-            Paste your <span className="font-mono">pk_live_…</span> (or <span className="font-mono">pk_test_…</span>) key and plan checkouts pay straight into your Paystack account.
-            Public key only — the secret key belongs in n8n, never in the app.
-          </p>
-          <div className="mt-2 flex gap-2">
-            <input
-              value={paystackKey}
-              onChange={e => setPaystackKey(e.target.value)}
-              type="password"
-              placeholder="pk_live_…"
-              className="min-w-0 flex-1 rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 font-mono text-xs placeholder:text-muted"
-            />
-            <button
-              type="button"
-              onClick={() => { setCreds({ paystackPublicKey: paystackKey.trim() || undefined }); setCreditToast(true) }}
-              className="shrink-0 rounded-xl bg-accent px-4 text-xs font-semibold text-white disabled:opacity-40"
-              disabled={!paystackKey.trim()}
-            >
-              {creds.paystackPublicKey ? 'Update' : 'Save'}
-            </button>
-          </div>
-          {creds.paystackPublicKey && <p className="mt-1.5 text-[11px] text-success">Paystack connected — NGN checkouts are live on the pricing page ✓</p>}
-        </div>
       </GlassCard>
 
       <GlassCard className="mt-4">

@@ -30,14 +30,19 @@ async function callN8n(task: string, payload: Record<string, unknown>): Promise<
   }
 }
 
+// Style DNA distilled from what actually performs in #buildinpublic —
+// raw numbers beat polish, honesty beats hype, threads with receipts win.
 const SYSTEM_PROMPT = `You are Super Dent X AI, an assistant for founders who build in public.
-Rules:
-- Sound like a real founder, not a marketer or AI
-- Be specific — use actual event data, not generic platitudes
-- Keep tweets punchy (max 280 chars or clear thread format)
-- LinkedIn posts should be 800-1200 chars, professional but real
-- Never start posts with "🚀 Exciting news!" or similar AI-sounding openers
-- Include numbers and metrics when available`
+Write like the best #buildinpublic accounts on X and LinkedIn, never like a marketer:
+- RAW NUMBERS FIRST: "₦47k MRR, lost 2 users this week, onboarding is broken" outperforms every polished announcement. If revenue/user/amount data exists in the events, lead with it.
+- HONESTY > HYPE: stagnation posts, failure stories and "here's what broke" get more replies than wins. Never hide the hard part.
+- DAY COUNTS anchor the story: "Day 47 of building X" — use the streak.
+- MILESTONE FORMAT: what shipped + the technical fight it took + what the user gets now.
+- WEEKLY NUMBERS FORMAT: users, revenue, what got built, one lesson, what's next — real numbers even if tiny ("3 users. all friends. still counts.").
+- THREAD HOOKS like "7 things I learned going 0→₦X" when there's enough material.
+- Tweets max 280 chars or a clear numbered thread. LinkedIn 800-1200 chars, professional but human.
+- Never open with "🚀 Exciting news!", "I'm thrilled", or any AI-sounding phrase. No hashtag spam (max 1).
+- Sound like the founder typed it on their phone after a real day.`
 
 interface GenParams {
   events: ShipEvent[]
@@ -103,25 +108,29 @@ function template(p: GenParams): string {
   const bullets = top.map(e => `→ ${e.title.replace(/^(feat|fix|chore|refactor|perf): /, '')}`)
   const counts = countBy(p.events)
   const learned = p.dailyLogs.find(l => l.whatILearned)?.whatILearned
+  const blocked = p.dailyLogs.find(l => l.whatBlockedMe)?.whatBlockedMe
+  // Money events lead — raw numbers are the whole culture
+  const money = p.events.find(e => e.category === 'revenue' || e.category === 'customer')
 
   switch (p.platform) {
     case 'twitter': {
       if (p.tone === 'technical') {
-        return `Shipped this week on ${p.projectName}:\n\n${bullets.join('\n')}\n\n${counts.commit ?? 0} commits, ${counts.deployment ?? 0} deploys. ${learned ? `Biggest lesson: ${learned}` : 'Consistency compounds.'}`
+        return `Shipped this week on ${p.projectName}:\n\n${bullets.join('\n')}\n\n${counts.commit ?? 0} commits, ${counts.deployment ?? 0} deploys.${blocked ? ` What fought back: ${blocked.slice(0, 80)}.` : ''} ${learned ? `Lesson: ${learned}` : 'Consistency compounds.'}`
       }
       if (p.tone === 'storytelling') {
-        return `A week ago this didn't exist.\n\nNow ${p.projectName} has:\n${bullets.join('\n')}\n\nBuilding in public, one ship at a time.`
+        return `A week ago this didn't exist.\n\nNow ${p.projectName} has:\n${bullets.join('\n')}\n\n${money ? `And the first receipts came in: ${money.title}.\n\n` : ''}Building in public, one ship at a time.`
       }
       if (p.tone === 'hype') {
-        return `${p.projectName} IS COOKING 🔥\n\n${bullets.join('\n')}\n\n${counts.commit ?? 0} commits. ${counts.deployment ?? 0} deploys. Zero days off.\n\nWe are SO back.`
+        return `${p.projectName} IS COOKING 🔥\n\n${bullets.join('\n')}\n\n${money ? `${money.title} ✅\n` : ''}${counts.commit ?? 0} commits. ${counts.deployment ?? 0} deploys. Zero days off.\n\nWe are SO back.`
       }
       if (p.tone === 'mentor') {
         return `A real week of building looks like this:\n\n${bullets.join('\n')}\n\nNot glamorous. Just consistent. ${learned ? `Biggest lesson: ${learned}` : 'Show up again tomorrow.'}`
       }
       if (p.tone === 'unfiltered') {
-        return `week recap, no polish:\n\n${bullets.join('\n')}\n\nsome of it fought back. shipped anyway.`
+        return `week recap, no polish:\n\n${bullets.join('\n')}\n\n${blocked ? `${blocked.slice(0, 70).toLowerCase()} nearly won. ` : ''}some of it fought back. shipped anyway.`
       }
-      return `This week I shipped:\n${bullets.join('\n')}\n\nBuilding ${p.projectName} in public. The streak continues. 🔥`
+      // founder default: the weekly-numbers format that actually performs
+      return `${p.projectName}, this week — honest numbers:\n\n${bullets.join('\n')}\n\n📊 ${p.events.length} ships · ${counts.commit ?? 0} commits · ${counts.deployment ?? 0} deploys${money ? `\n💰 ${money.title}` : ''}\n\n${learned ? `Lesson: ${learned}` : blocked ? `Still fighting: ${blocked.slice(0, 60)}` : 'Small numbers. Still counts. Still building.'}`
     }
     case 'linkedin': {
       if (p.tone === 'storytelling') {

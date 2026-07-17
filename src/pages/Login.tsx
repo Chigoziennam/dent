@@ -138,7 +138,7 @@ export default function Login() {
         {/* Email + password */}
         <div className="space-y-2.5">
           <input
-            value={email} onChange={e => setEmail(e.target.value)} type="email" autoComplete="email"
+            value={email} onChange={e => setEmail(e.target.value)} type="email" autoComplete="email" autoFocus
             placeholder="you@buildsthings.com"
             className="w-full rounded-xl border border-line bg-white/[0.03] px-3.5 py-3 text-sm placeholder:text-muted"
           />
@@ -161,7 +161,15 @@ export default function Login() {
             disabled={busy || !email.trim() || password.length < (mode === 'signup' ? 8 : 1)}
             className="sheen flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3 text-sm font-semibold text-white shadow-[0_0_28px_rgba(99,102,241,0.35)] disabled:opacity-50"
           >
-            {busy ? 'One sec…' : mode === 'signin' ? 'Sign in' : 'Create my account'}
+            {busy ? (
+              <span className="flex items-center gap-1.5">
+                {[0, 1, 2].map(i => (
+                  <motion.span key={i} className="h-1.5 w-1.5 rounded-full bg-white"
+                    animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.14 }} />
+                ))}
+              </span>
+            ) : mode === 'signin' ? 'Sign in' : 'Create my account'}
           </motion.button>
 
           <div className="flex items-center justify-between text-[11.5px]">
@@ -178,7 +186,11 @@ export default function Login() {
 
         <AnimatePresence>
           {error && (
-            <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            <motion.p
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto', x: [0, -6, 6, -4, 4, 0] }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ x: { duration: 0.4 } }}
               className="mt-3 overflow-hidden rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
               {error}
             </motion.p>

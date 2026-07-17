@@ -5,7 +5,7 @@ import { format, subDays } from 'date-fns'
 import { Plus, Sparkles, PenLine, Search, CalendarRange, Flame, Hammer, SlidersHorizontal, Zap } from 'lucide-react'
 import { useDent, todayStr } from '../lib/store'
 import { SOURCE_LABEL, CATEGORY_META, levelForXP, type Mood, type EventCategory } from '../lib/types'
-import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill } from '../components/ui'
+import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill, AICore } from '../components/ui'
 import { AddEventModal } from '../components/AddEventModal'
 import { Mascot } from '../components/Mascot'
 
@@ -98,16 +98,18 @@ export default function Today() {
   const [note, setNote] = useState('')
   const [link, setLink] = useState('')
   const [effort, setEffort] = useState<string | null>(null)
+  const [shipKind, setShipKind] = useState<string | null>(null)
   const [cheer, setCheer] = useState<string | null>(null)
 
   const quickShip = () => {
     if (!quickTitle.trim()) return
     const parts: string[] = []
     if (note.trim()) parts.push(note.trim())
+    if (shipKind) parts.push(`Belongs to: ${shipKind}`)
     if (effort) parts.push(`Effort: ${effort}`)
     if (link.trim()) parts.push(`Link: ${link.trim()}`)
     addEvent({ title: quickTitle.trim(), category: quickCat, description: parts.join('\n') || undefined })
-    setQuickTitle(''); setNote(''); setLink(''); setEffort(null)
+    setQuickTitle(''); setNote(''); setLink(''); setEffort(null); setShipKind(null)
     setCheer(SHIP_CHEERS[Math.floor(Math.random() * SHIP_CHEERS.length)])
     setTimeout(() => setCheer(null), 2200)
   }
@@ -269,13 +271,7 @@ export default function Today() {
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
         className="mt-4 flex items-start gap-3 rounded-2xl border border-accent/25 bg-accent/[0.06] p-4"
       >
-        <motion.span
-          className="mt-0.5 text-lg"
-          animate={{ rotate: [0, -6, 6, 0] }}
-          transition={{ duration: 4, repeat: Infinity, repeatDelay: 3 }}
-        >
-          🤖
-        </motion.span>
+        <span className="mt-0.5"><AICore size={24} color="#a5b4fc" /></span>
         <div className="min-w-0">
           <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-accent">Your companion</div>
           <p className="mt-0.5 text-[13px] leading-relaxed text-secondary">{nudge}</p>
@@ -423,6 +419,24 @@ export default function Today() {
                       >
                         <span className={`text-[11px] font-semibold ${effort === ef.key ? 'text-accent' : 'text-secondary'}`}>{ef.key}</span>
                         <span className="ml-1 text-[9px] text-muted">{ef.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {/* Is this a fresh start or the ongoing grind? The AI uses it to tell the story right. */}
+                  <div className="flex gap-1.5">
+                    {[
+                      { key: '🚀 New project', hint: 'day one' },
+                      { key: '🔧 Existing build', hint: 'the grind' },
+                      { key: '⚡ One-off', hint: 'side quest' },
+                    ].map(k => (
+                      <button
+                        key={k.key}
+                        type="button"
+                        onClick={() => setShipKind(shipKind === k.key ? null : k.key)}
+                        className={`flex-1 rounded-lg border px-2 py-1.5 text-center transition-all ${shipKind === k.key ? 'border-accent/60 bg-accent/10' : 'border-line hover:border-line-hover'}`}
+                      >
+                        <span className={`text-[11px] font-semibold ${shipKind === k.key ? 'text-accent' : 'text-secondary'}`}>{k.key}</span>
+                        <span className="ml-1 text-[9px] text-muted">{k.hint}</span>
                       </button>
                     ))}
                   </div>

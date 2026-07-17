@@ -31,7 +31,7 @@
     },
     {
       "id": "http1",
-      "name": "Claude API",
+      "name": "OpenRouter AI",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -40,27 +40,31 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "x-api-key",
-              "value": "={{ $env.ANTHROPIC_API_KEY }}"
-            },
-            {
-              "name": "anthropic-version",
-              "value": "2023-06-01"
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
             },
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://dent.vercel.app"
+            },
+            {
+              "name": "X-Title",
+              "value": "Super Dent X"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1024, system: $json.system, messages: [{ role: 'user', content: $json.user }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: 'anthropic/claude-sonnet-4.5', max_tokens: 1024, messages: [{ role: 'system', content: $json.system }, { role: 'user', content: $json.user }] }) }}"
       }
     },
     {
@@ -74,7 +78,7 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ text: $json.content[0].text }) }}"
+        "responseBody": "={{ JSON.stringify({ text: $json.choices[0].message.content }) }}"
       }
     }
   ],
@@ -94,14 +98,14 @@
       "main": [
         [
           {
-            "node": "Claude API",
+            "node": "OpenRouter AI",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Claude API": {
+    "OpenRouter AI": {
       "main": [
         [
           {

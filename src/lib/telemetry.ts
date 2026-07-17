@@ -10,6 +10,7 @@ const OWNER_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
 type TelemetryEvent =
   | 'session_start' | 'demo_login' | 'signup'
+  | 'real_login_fresh' | 'onboarded' | 'payment_success'
   | 'ship_logged' | 'daily_log_saved' | 'ai_generated'
   | 'pdf_exported' | 'plan_viewed' | 'credits_viewed'
 

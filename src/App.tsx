@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useDent } from './lib/store'
 import { supabase } from './lib/supabase'
+import { userFromSession } from './lib/sync'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Pricing from './pages/Pricing'
@@ -17,18 +18,22 @@ import Changelog from './pages/Changelog'
 import Settings from './pages/Settings'
 import { PublicProfile, PublicChangelog } from './pages/Profile'
 
-// Picks up the Supabase session after OAuth/magic-link redirects —
-// without this, a successful GitHub login still looked "logged out".
+// Picks up the Supabase session after OAuth/magic-link redirects.
+// Real sessions go through realLogin: the demo seed is wiped, the profile
+// takes the person's actual name from Google/GitHub/email, and their own
+// cloud data hydrates in. The demo stays demo; accounts are accounts.
 function AuthSync() {
-  const login = useDent(s => s.login)
+  const realLogin = useDent(s => s.realLogin)
   useEffect(() => {
     if (!supabase) return
-    supabase.auth.getSession().then(({ data }) => { if (data.session) login() })
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) realLogin(userFromSession(data.session.user))
+    })
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) login()
+      if (session) realLogin(userFromSession(session.user))
     })
     return () => sub.subscription.unsubscribe()
-  }, [login])
+  }, [realLogin])
   return null
 }
 

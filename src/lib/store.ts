@@ -3,6 +3,11 @@ import { persist } from 'zustand/middleware'
 import { format, subDays } from 'date-fns'
 import { generateSeed } from './seed'
 import { track } from './telemetry'
+import { supabase } from './supabase'
+import {
+  fetchCloudData, fetchCloudProfile, pushChangelog, pushDailyLog,
+  pushEvent, pushProfile, type CloudUser,
+} from './sync'
 import type {
   ShipEvent, DailyLog, Profile, ContentPiece, ChangelogEntry,
   EventCategory, EventSource, Mood, Tone,
@@ -18,11 +23,17 @@ interface DentState {
   unlocked: Record<string, string> // code -> date unlocked
   justUnlocked: string | null
   loggedIn: boolean
+  // Real account identity — null means demo/anonymous
+  userId: string | null
+  // True while the store still holds the showcase seed data
+  seeded: boolean
   // Integration credentials — stored locally on this device only
   creds: { githubToken?: string; githubUser?: string; supabaseUrl?: string; supabaseAnon?: string; paystackPublicKey?: string }
   aiUsed: number // AI generations used this month
 
   login: () => void
+  realLogin: (user: CloudUser) => Promise<void>
+  completeOnboarding: (o: { displayName: string; projectName: string; projectTagline: string; startStage: 'spark' | 'building' | 'launched' }) => void
   logout: () => void
   addEvent: (e: { title: string; category: EventCategory; source?: EventSource; description?: string }) => void
   togglePin: (id: string) => void
@@ -112,11 +123,88 @@ export const useDent = create<DentState>()(
       ...buildInitial(),
       justUnlocked: null,
       loggedIn: false,
+      userId: null,
+      seeded: true,
       creds: {},
       aiUsed: 0,
 
+      // Demo door: keeps the seeded showcase data
       login: () => { track('demo_login'); set({ loggedIn: true }) },
-      logout: () => set({ loggedIn: false }),
+
+      // Real account: first arrival wipes the demo seed so the user starts
+      // THEIR story — name comes from Google/GitHub/email, never "Chigozie".
+      realLogin: async (user) => {
+        const s = get()
+        const fresh = s.seeded || s.userId !== user.id
+        if (fresh) {
+          track('real_login_fresh')
+          set({
+            loggedIn: true, userId: user.id, seeded: false,
+            events: [], dailyLogs: [], content: [], changelog: [], unlocked: {}, justUnlocked: null,
+            profile: {
+              ...s.profile,
+              username: user.username ?? 'builder',
+              displayName: user.name ?? 'Builder',
+              email: user.email,
+              avatarUrl: user.avatarUrl,
+              avatar: undefined,
+              bio: '',
+              projectName: '',
+              projectTagline: '',
+              website: '', twitter: '', github: '',
+              streakCurrent: 0, streakLongest: 0, builderScore: 0, totalShips: 0,
+              tier: 'free', onboarded: false, startStage: undefined,
+            },
+          })
+        } else {
+          set({ loggedIn: true })
+        }
+        // Mirror down whatever the cloud already knows (other devices, past sessions)
+        try {
+          const [cp, data] = await Promise.all([fetchCloudProfile(user.id), fetchCloudData(user.id)])
+          if (data && (data.events.length > 0 || data.dailyLogs.length > 0)) {
+            const streak = computeStreak(data.events, data.dailyLogs)
+            set(st => ({
+              events: data.events,
+              dailyLogs: data.dailyLogs,
+              profile: {
+                ...st.profile,
+                streakCurrent: streak.current,
+                streakLongest: streak.longest,
+                totalShips: data.events.length,
+                builderScore: data.events.length * 10 + data.dailyLogs.length * 25,
+              },
+            }))
+          }
+          if (cp) {
+            set(st => ({
+              profile: {
+                ...st.profile,
+                username: (cp.username as string) ?? st.profile.username,
+                displayName: (cp.display_name as string) ?? st.profile.displayName,
+                bio: (cp.bio as string) ?? st.profile.bio,
+                projectName: (cp.current_project_name as string) ?? st.profile.projectName,
+                projectTagline: (cp.current_project_tagline as string) ?? st.profile.projectTagline,
+                startStage: (cp.start_stage as Profile['startStage']) ?? st.profile.startStage,
+                tier: (cp.tier as Profile['tier']) ?? st.profile.tier,
+                onboarded: Boolean(cp.current_project_name) || st.profile.onboarded,
+              },
+            }))
+          }
+        } catch { /* offline is fine — local wins */ }
+      },
+
+      completeOnboarding: (o) => {
+        const s = get()
+        set({ profile: { ...s.profile, ...o, onboarded: true } })
+        if (s.userId) pushProfile(s.userId, { ...o, username: s.profile.username, email: s.profile.email })
+        track('onboarded', { stage: o.startStage })
+      },
+
+      logout: () => {
+        supabase?.auth.signOut()
+        set({ loggedIn: false, userId: null })
+      },
 
       addEvent: (e) => {
         const now = new Date()
@@ -145,6 +233,7 @@ export const useDent = create<DentState>()(
         profile.builderScore += ach.bonusXP
         track('ship_logged', { category: ev.category })
         set({ events, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
+        if (s.userId) pushEvent(s.userId, ev)
       },
 
       togglePin: (id) => set(s => ({ events: s.events.map(e => e.id === id ? { ...e, isPinned: !e.isPinned } : e) })),
@@ -167,6 +256,7 @@ export const useDent = create<DentState>()(
         profile.builderScore += ach.bonusXP
         track('daily_log_saved', { mood: log.mood, energy: log.energyLevel })
         set({ dailyLogs, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
+        if (s.userId) pushDailyLog(s.userId, log)
       },
 
       saveContent: (c) => {
@@ -181,11 +271,19 @@ export const useDent = create<DentState>()(
         })
       },
 
-      publishChangelog: (entry) => set(s => ({
-        changelog: [{ ...entry, id: `cl_${Date.now()}`, publishedAt: format(new Date(), 'yyyy-MM-dd') }, ...s.changelog],
-      })),
+      publishChangelog: (entry) => {
+        set(s => ({
+          changelog: [{ ...entry, id: `cl_${Date.now()}`, publishedAt: format(new Date(), 'yyyy-MM-dd') }, ...s.changelog],
+        }))
+        const uid = get().userId
+        if (uid) pushChangelog(uid, entry)
+      },
 
-      updateProfile: (p) => set(s => ({ profile: { ...s.profile, ...p } })),
+      updateProfile: (p) => {
+        set(s => ({ profile: { ...s.profile, ...p } }))
+        const s = get()
+        if (s.userId) pushProfile(s.userId, s.profile)
+      },
       clearUnlockToast: () => set({ justUnlocked: null }),
       setCreds: (c) => set(s => ({ creds: { ...s.creds, ...c } })),
       bumpAiUsage: () => {

@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sun, Clock, PenLine, BarChart3, ScrollText, Trophy, Plug, Settings,
-  Search, ChevronsLeft, ChevronsRight, User, Sparkles,
+  Search, ChevronsLeft, ChevronsRight, Sparkles, LayoutGrid, X, ExternalLink,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useDent } from '../lib/store'
@@ -11,6 +11,8 @@ import { Logo, StreakBadge, SpaceBackdrop, AnimatedAvatar } from './ui'
 import { CommandPalette } from './CommandPalette'
 import { AchievementToast } from './AchievementToast'
 import { Copilot } from './Copilot'
+import { Onboarding } from './Onboarding'
+import { Tour } from './Tour'
 
 const NAV = [
   { to: '/app/today', label: 'Today', icon: Sun },
@@ -30,14 +32,24 @@ const MOBILE_NAV = [
   { to: '/app/timeline', label: 'Timeline', icon: Clock },
   { to: '/app/week', label: 'Week', icon: Sparkles },
   { to: '/app/write', label: 'Write', icon: PenLine },
-  { to: '/app/settings', label: 'You', icon: User },
+]
+// Everything else lives in the More sheet — the full app, phone included
+const MORE_NAV = [
+  { to: '/app/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/app/achievements', label: 'Achievements', icon: Trophy },
+  { to: '/app/changelog', label: 'Changelog', icon: ScrollText },
+  { to: '/app/integrations', label: 'Integrations', icon: Plug },
+  { to: '/app/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function Shell() {
   const [collapsed, setCollapsed] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [now, setNow] = useState(new Date())
   const profile = useDent(s => s.profile)
+  const userId = useDent(s => s.userId)
+  const needsOnboarding = Boolean(userId) && !profile.onboarded
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -163,33 +175,94 @@ export default function Shell() {
         </main>
       </div>
 
-      {/* Mobile bottom tab bar */}
+      {/* Mobile bottom tab bar — 4 pinned tabs + More opens the whole app */}
       <nav className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/85 backdrop-blur-2xl md:hidden">
         <div className="flex items-stretch justify-around">
           {MOBILE_NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className="flex min-w-[44px] flex-col items-center gap-0.5 px-2 py-2">
+            <NavLink key={to} to={to} className="flex min-w-[44px] flex-col items-center gap-0.5 px-2 py-2" onClick={() => setMoreOpen(false)}>
               {({ isActive }) => (
                 <>
-                  <div className={`relative rounded-xl px-3.5 py-1 transition-colors ${isActive ? 'text-accent' : 'text-muted'}`}>
-                    {isActive && (
+                  <div className={`relative rounded-xl px-3.5 py-1 transition-colors ${isActive && !moreOpen ? 'text-accent' : 'text-muted'}`}>
+                    {isActive && !moreOpen && (
                       <motion.div layoutId="mobile-pill" className="absolute inset-0 rounded-xl bg-accent/15"
                         transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
                     )}
                     <Icon size={20} className="relative" />
                   </div>
-                  <span className={`text-[10px] font-medium ${isActive ? 'text-primary' : 'text-muted'}`}>{label}</span>
+                  <span className={`text-[10px] font-medium ${isActive && !moreOpen ? 'text-primary' : 'text-muted'}`}>{label}</span>
                 </>
               )}
             </NavLink>
           ))}
+          <button type="button" onClick={() => setMoreOpen(o => !o)} className="flex min-w-[44px] flex-col items-center gap-0.5 px-2 py-2">
+            <div className={`relative rounded-xl px-3.5 py-1 transition-colors ${moreOpen ? 'text-accent' : 'text-muted'}`}>
+              {moreOpen && <div className="absolute inset-0 rounded-xl bg-accent/15" />}
+              <LayoutGrid size={20} className="relative" />
+            </div>
+            <span className={`text-[10px] font-medium ${moreOpen ? 'text-primary' : 'text-muted'}`}>More</span>
+          </button>
         </div>
       </nav>
+
+      {/* More sheet — everything the sidebar has, on the phone */}
+      <AnimatePresence>
+        {moreOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setMoreOpen(false)}
+              className="fixed inset-0 z-40 bg-black/55 backdrop-blur-sm md:hidden"
+            />
+            <motion.div
+              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 380, damping: 36 }}
+              className="glass-strong pb-safe fixed inset-x-0 bottom-0 z-40 !rounded-b-none p-5 pb-24 md:hidden"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <AnimatedAvatar src={profile.avatarUrl} fallback={profile.avatar ?? profile.displayName[0]} hue={profile.avatarHue ?? 245} size={36} />
+                  <div>
+                    <div className="text-sm font-semibold leading-tight">{profile.displayName}</div>
+                    <div className="text-[11px] text-muted">@{profile.username}</div>
+                  </div>
+                </div>
+                <button onClick={() => setMoreOpen(false)} className="rounded-lg p-2 text-muted hover:text-secondary"><X size={18} /></button>
+              </div>
+              <div className="grid grid-cols-3 gap-2.5">
+                {MORE_NAV.map(({ to, label, icon: Icon }) => (
+                  <NavLink
+                    key={to} to={to} onClick={() => setMoreOpen(false)}
+                    className={({ isActive }) => `flex flex-col items-center gap-1.5 rounded-2xl border p-3.5 transition-colors ${isActive ? 'border-accent/50 bg-accent/10 text-accent' : 'border-line text-secondary'}`}
+                  >
+                    <Icon size={19} />
+                    <span className="text-[10.5px] font-medium">{label}</span>
+                  </NavLink>
+                ))}
+                <NavLink
+                  to={`/${profile.username}`} onClick={() => setMoreOpen(false)}
+                  className="flex flex-col items-center gap-1.5 rounded-2xl border border-line p-3.5 text-secondary"
+                >
+                  <ExternalLink size={19} />
+                  <span className="text-[10.5px] font-medium">Public page</span>
+                </NavLink>
+              </div>
+              <div className="mt-4 flex justify-center"><StreakBadge days={profile.streakCurrent} size="sm" /></div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
       </AnimatePresence>
       <AchievementToast />
       <Copilot />
+
+      {/* First-run: onboarding questions, then the guided tour */}
+      {needsOnboarding && <Onboarding />}
+      <AnimatePresence>
+        {!needsOnboarding && !profile.tourDone && <Tour />}
+      </AnimatePresence>
     </div>
   )
 }

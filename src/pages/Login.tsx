@@ -2,14 +2,14 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Github, Mail, ArrowRight, Check, Eye, EyeOff, Sparkles } from 'lucide-react'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { supabase, supabaseReady } from '../lib/supabase'
 import { SpaceBackdrop, Logo } from '../components/ui'
 
 type Mode = 'signin' | 'signup'
 
 export default function Login() {
-  const login = useShipLog(s => s.login)
+  const login = useDent(s => s.login)
   const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')

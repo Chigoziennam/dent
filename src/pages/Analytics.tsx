@@ -2,12 +2,12 @@ import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { format, subDays, startOfWeek, parseISO } from 'date-fns'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { levelForXP } from '../lib/types'
 import { Page, GlassCard, CountUp, XPBar, SectionTitle, stagger } from '../components/ui'
 
 export default function Analytics() {
-  const { events, dailyLogs, profile, content } = useShipLog()
+  const { events, dailyLogs, profile, content } = useDent()
   const level = levelForXP(profile.builderScore)
 
   // Heatmap: last 26 weeks (mobile-friendly), Mon-start columns

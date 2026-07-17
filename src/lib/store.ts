@@ -9,7 +9,7 @@ import type {
 } from './types'
 import { ACHIEVEMENTS } from './achievements'
 
-interface ShipLogState {
+interface DentState {
   profile: Profile
   events: ShipEvent[]
   dailyLogs: DailyLog[]
@@ -32,7 +32,7 @@ interface ShipLogState {
   publishChangelog: (entry: Omit<ChangelogEntry, 'id' | 'publishedAt'>) => void
   updateProfile: (p: Partial<Profile>) => void
   clearUnlockToast: () => void
-  setCreds: (c: Partial<ShipLogState['creds']>) => void
+  setCreds: (c: Partial<DentState['creds']>) => void
   bumpAiUsage: () => void
 }
 
@@ -60,7 +60,7 @@ function computeStreak(events: ShipEvent[], logs: DailyLog[]): { current: number
   return { current, longest: Math.max(longest, current) }
 }
 
-function checkAchievements(state: Pick<ShipLogState, 'events' | 'dailyLogs' | 'content' | 'profile' | 'unlocked'>): { unlocked: Record<string, string>; newCode: string | null; bonusXP: number } {
+function checkAchievements(state: Pick<DentState, 'events' | 'dailyLogs' | 'content' | 'profile' | 'unlocked'>): { unlocked: Record<string, string>; newCode: string | null; bonusXP: number } {
   const metrics: Record<string, number> = {
     total_events: state.events.length,
     total_commits: state.events.filter(e => e.category === 'commit').length,
@@ -90,7 +90,7 @@ function buildInitial() {
     username: 'chigozie',
     displayName: 'Chigozie',
     bio: 'Founder at Nalto. Building tools for African schools and founders who ship.',
-    projectName: 'ShipLog',
+    projectName: 'Dent',
     projectTagline: 'Build in Public. Without Thinking About It.',
     website: 'https://lumenai.sbs',
     twitter: 'NaltoHQ',
@@ -106,7 +106,7 @@ function buildInitial() {
   return { profile, ...seed, unlocked: pre.unlocked }
 }
 
-export const useShipLog = create<ShipLogState>()(
+export const useDent = create<DentState>()(
   persist(
     (set, get) => ({
       ...buildInitial(),

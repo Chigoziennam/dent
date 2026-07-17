@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Check, ArrowLeft, Crown } from 'lucide-react'
 import { SpaceBackdrop, Logo } from '../components/ui'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { track } from '../lib/telemetry'
 
 type Currency = 'NGN' | 'USD'
@@ -25,7 +25,12 @@ function detectCurrency(): Currency {
   return 'USD'
 }
 
-// Paystack inline checkout — loads their script once, pays to YOUR account
+// Paystack inline checkout — loads their script once, pays to YOUR account.
+// The founder's PUBLIC key ships with the build via env; every user's payment
+// settles straight to the founder's Paystack balance → bank account.
+// (Public keys are safe client-side. The SECRET key never leaves the server —
+// the n8n payment-confirmer verifies transactions with it.)
+const FOUNDER_PAYSTACK_KEY = (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string | undefined)?.trim() || undefined
 let paystackLoading: Promise<void> | null = null
 function loadPaystack(): Promise<void> {
   if (paystackLoading) return paystackLoading
@@ -90,7 +95,7 @@ export default function Pricing() {
   const [yearly, setYearly] = useState(false)
   const [currency, setCurrency] = useState<Currency>(detectCurrency())
   const [payMsg, setPayMsg] = useState<string | null>(null)
-  const { creds, updateProfile } = useShipLog()
+  const { creds, updateProfile } = useDent()
 
   useEffect(() => { track('plan_viewed', { currency }) }, [currency])
 
@@ -98,7 +103,9 @@ export default function Pricing() {
   const checkout = async (tierName: string) => {
     const amount = PRICES[tierName]?.[currency][yearly ? 'y' : 'm'] ?? 0
     if (amount === 0) return
-    if (currency !== 'NGN' || !creds.paystackPublicKey) {
+    // creds key (Settings) overrides for testing; env key is the production default
+    const payKey = creds.paystackPublicKey || FOUNDER_PAYSTACK_KEY
+    if (currency !== 'NGN' || !payKey) {
       setPayMsg('Card payments go live at launch — Nigerian builders pay in naira via Paystack.')
       setTimeout(() => setPayMsg(null), 3000)
       return
@@ -108,7 +115,7 @@ export default function Pricing() {
     await loadPaystack()
     const Pop = (window as unknown as { PaystackPop: new () => { newTransaction: (o: Record<string, unknown>) => void } }).PaystackPop
     new Pop().newTransaction({
-      key: creds.paystackPublicKey,
+      key: payKey,
       email,
       amount: amount * 100, // kobo
       currency: 'NGN',
@@ -127,7 +134,7 @@ export default function Pricing() {
       <div className="pointer-events-none fixed inset-0"><SpaceBackdrop /></div>
       <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
         <Link to="/" className="flex items-center gap-2.5">
-          <Logo size={30} /><span className="font-bold tracking-tight">ShipLog</span>
+          <Logo size={30} /><span className="font-bold tracking-tight">Dent</span>
         </Link>
         <Link to="/login" className="rounded-lg border border-line px-3.5 py-1.5 text-[13px] font-medium text-secondary hover:border-line-hover hover:text-primary">
           Sign in
@@ -230,7 +237,7 @@ export default function Pricing() {
                     onClick={() => checkout(t.name)}
                     className={`block w-full rounded-xl py-3 text-center text-sm font-semibold ${t.highlight ? 'sheen bg-accent text-white shadow-[0_0_28px_rgba(99,102,241,0.4)]' : 'border border-line text-secondary transition-colors hover:border-line-hover hover:text-primary'}`}
                   >
-                    {t.cta}{currency === 'NGN' && creds.paystackPublicKey ? ' · pay with Paystack' : ''}
+                    {t.cta}{currency === 'NGN' && (creds.paystackPublicKey || FOUNDER_PAYSTACK_KEY) ? ' · pay with Paystack' : ''}
                   </button>
                 )}
               </motion.div>

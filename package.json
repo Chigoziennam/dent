@@ -1,8 +1,8 @@
 {
-  "name": "nalto-shiplog",
+  "name": "nalto-dent",
   "private": true,
   "version": "0.1.0",
-  "description": "Nalto ShipLog — Build in Public. Without Thinking About It.",
+  "description": "Dent by Nalto — Build in Public. Without Thinking About It.",
   "type": "module",
   "scripts": {
     "dev": "vite",

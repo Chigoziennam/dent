@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, isToday, isYesterday, parseISO, subDays } from 'date-fns'
 import { Pin, Trash2, Sparkles, History } from 'lucide-react'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { SOURCE_LABEL, type EventCategory } from '../lib/types'
 import { Page, CategoryPill, CountUp } from '../components/ui'
 
@@ -26,7 +26,7 @@ function dateLabel(d: string): string {
 }
 
 export default function Timeline() {
-  const { events, togglePin, deleteEvent } = useShipLog()
+  const { events, togglePin, deleteEvent } = useDent()
   const [filter, setFilter] = useState<EventCategory | 'all'>('all')
   const [limit, setLimit] = useState(40)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -185,7 +185,7 @@ export default function Timeline() {
 }
 
 function EventRow({ event: e, onPin, onDelete, expanded, onExpand }: {
-  event: ReturnType<typeof useShipLog.getState>['events'][number]
+  event: ReturnType<typeof useDent.getState>['events'][number]
   onPin: () => void; onDelete: () => void; expanded: boolean; onExpand: () => void
 }) {
   return (

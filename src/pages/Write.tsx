@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { subDays, format } from 'date-fns'
 import { Sparkles, Copy, Save, Check, ChevronDown, Wand2, Lock, Atom, ExternalLink } from 'lucide-react'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { generateContent, humanize, fuse, composeUrl } from '../lib/ai'
 import { TONE_META, type ContentPlatform, type Tone } from '../lib/types'
 import { Page, CategoryPill, SectionTitle } from '../components/ui'
@@ -27,7 +27,7 @@ const RANGES = [
 ]
 
 export default function Write() {
-  const { events, dailyLogs, profile, saveContent, content } = useShipLog()
+  const { events, dailyLogs, profile, saveContent, content } = useDent()
   const [mode, setMode] = useState<'ships' | 'manual' | 'fusion'>('ships')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [state, setState] = useState('')
@@ -68,7 +68,7 @@ export default function Write() {
     }
   }
 
-  const bumpAiUsage = useShipLog(s => s.bumpAiUsage)
+  const bumpAiUsage = useDent(s => s.bumpAiUsage)
   const generate = async () => {
     setGenerating(true)
     bumpAiUsage()

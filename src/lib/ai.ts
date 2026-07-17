@@ -18,6 +18,9 @@ async function callN8n(task: string, payload: Record<string, unknown>): Promise<
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ task, ...payload }),
+      // n8n can hang forever if the workflow isn't active — never let the UI
+      // wait on it. 12s is enough for a real Claude answer through n8n.
+      signal: AbortSignal.timeout(12_000),
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -27,7 +30,7 @@ async function callN8n(task: string, payload: Record<string, unknown>): Promise<
   }
 }
 
-const SYSTEM_PROMPT = `You are ShipLog AI, an assistant for founders who build in public.
+const SYSTEM_PROMPT = `You are Dent AI, an assistant for founders who build in public.
 Rules:
 - Sound like a real founder, not a marketer or AI
 - Be specific — use actual event data, not generic platitudes
@@ -327,7 +330,14 @@ export interface CopilotContext {
   displayName: string
 }
 
-export async function copilotAnswer(question: string, ctx: CopilotContext): Promise<string> {
+// Which brain is answering? The UI shows this so "automated" is never a mystery.
+export function aiMode(): 'n8n' | 'direct' | 'local' {
+  if (N8N_BASE) return 'n8n'
+  if (API_KEY) return 'direct'
+  return 'local'
+}
+
+async function copilotRemote(question: string, ctx: CopilotContext): Promise<string | null> {
   const alive = await callN8n('chat', {
     question,
     projectName: ctx.projectName,
@@ -351,7 +361,7 @@ export async function copilotAnswer(question: string, ctx: CopilotContext): Prom
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 400,
-          system: `You are the ShipLog Co-pilot for ${ctx.displayName}, a founder building ${ctx.projectName}. You have their full shipping log. Be a real companion: specific, warm, brief (2-4 sentences), reference their actual events by name and date. Motivate with receipts, never generic hype. If asked "when did I X", answer from the events list.`,
+          system: `You are the Dent Co-pilot for ${ctx.displayName}, a founder building ${ctx.projectName}. You have their full shipping log. Be a real companion: specific, warm, brief (2-4 sentences), reference their actual events by name and date. Motivate with receipts, never generic hype. If asked "when did I X", answer from the events list.`,
           messages: [{
             role: 'user',
             content: `My streak: ${ctx.streak} days.\nMy recent events:\n${ctx.events.slice(0, 60).map(e => `- ${e.eventDate} [${e.category}] ${e.title}`).join('\n')}\n\nRecent reflections:\n${ctx.dailyLogs.slice(0, 10).map(l => `${l.logDate}: built ${l.whatIBuilt}; learned ${l.whatILearned}`).join('\n')}\n\nMy question: ${question}`,
@@ -362,8 +372,45 @@ export async function copilotAnswer(question: string, ctx: CopilotContext): Prom
       if (data?.content?.[0]?.text) return data.content[0].text
     } catch { /* fall through to local engine */ }
   }
+  return null
+}
+
+export async function copilotAnswer(question: string, ctx: CopilotContext): Promise<string> {
+  const remote = await copilotRemote(question, ctx)
+  if (remote) return remote
   await new Promise(r => setTimeout(r, 350))
   return localAnswer(question, ctx)
+}
+
+// ── Proactive briefing — the co-pilot speaks FIRST ────────────
+// Rides the same n8n `chat` task, so no server changes needed;
+// the local twin composes a data-driven brief when offline.
+const BRIEF_QUESTION = 'Open the conversation with a short proactive briefing (you speak first, I asked nothing): greet me by name, sum up today and this week from my real events — actual titles and numbers — flag yesterday\'s blocker if there was one, and end with the single most valuable next move. 4 sentences max, warm but zero fluff.'
+
+export async function copilotBriefing(ctx: CopilotContext): Promise<string> {
+  const remote = await copilotRemote(BRIEF_QUESTION, ctx)
+  if (remote) return remote
+  await new Promise(r => setTimeout(r, 450))
+  return localBriefing(ctx)
+}
+
+function localBriefing(ctx: CopilotContext): string {
+  const today = new Date().toISOString().slice(0, 10)
+  const todays = ctx.events.filter(e => e.eventDate === today)
+  const week = ctx.events.filter(e => e.eventDate >= new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10))
+  const lastLog = ctx.dailyLogs[0]
+  const hour = new Date().getHours()
+  const opener = hour < 12 ? 'Morning briefing' : hour < 17 ? 'Afternoon check-in' : 'Evening debrief'
+  const lines = [
+    `${opener}, ${ctx.displayName}. Here's where ${ctx.projectName} stands:`,
+    todays.length === 0
+      ? `• Nothing logged yet today — the ${ctx.streak}-day streak is hungry.`
+      : `• ${todays.length} ship${todays.length > 1 ? 's' : ''} today — latest: “${todays[0].title}”.`,
+    `• ${week.length} ships this week · ${ctx.events.length} lifetime.`,
+  ]
+  if (lastLog?.whatBlockedMe) lines.push(`• Last session's wall: “${lastLog.whatBlockedMe.slice(0, 70)}” — worth attacking first.`)
+  lines.push(todays.length === 0 ? 'Smallest valuable thing first. Ship it, log it — I\'ll see it the second you do.' : 'Momentum is real. What are we shipping next?')
+  return lines.join('\n')
 }
 
 function localAnswer(question: string, ctx: CopilotContext): string {

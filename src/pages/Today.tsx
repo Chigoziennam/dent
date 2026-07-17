@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, subDays } from 'date-fns'
-import { Plus, Sparkles, PenLine, Search, CalendarRange, Flame, Hammer, SlidersHorizontal } from 'lucide-react'
-import { useShipLog, todayStr } from '../lib/store'
+import { Plus, Sparkles, PenLine, Search, CalendarRange, Flame, Hammer, SlidersHorizontal, Zap } from 'lucide-react'
+import { useDent, todayStr } from '../lib/store'
 import { SOURCE_LABEL, CATEGORY_META, levelForXP, type Mood, type EventCategory } from '../lib/types'
 import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill } from '../components/ui'
 import { AddEventModal } from '../components/AddEventModal'
@@ -67,7 +67,7 @@ const EFFORT = [
 ]
 
 export default function Today() {
-  const { profile, events, dailyLogs, saveDailyLog, addEvent } = useShipLog()
+  const { profile, events, dailyLogs, saveDailyLog, addEvent } = useDent()
   const [params, setParams] = useSearchParams()
   const [addOpen, setAddOpen] = useState(params.get('add') === '1')
   const [xpFloat, setXpFloat] = useState(false)
@@ -449,12 +449,15 @@ export default function Today() {
 
         {/* Evening chapter — same log, same card, the day's last entry */}
         <div className="px-5 pb-5">
-          <div className="flex items-center gap-3 py-4">
-            <div className="h-px flex-1 bg-line" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
-              close out the day {existingLog && <span className="text-success">✓</span>}
+          <div className="flex flex-col items-center py-4">
+            <div className="flex w-full items-center gap-3">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-line to-line" />
+              <DayCloseSeal done={!!existingLog} />
+              <div className="h-px flex-1 bg-gradient-to-l from-transparent via-line to-line" />
+            </div>
+            <span className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
+              {existingLog ? <>day sealed <span className="text-success">✓</span></> : 'close out the day'}
             </span>
-            <div className="h-px flex-1 bg-line" />
           </div>
           <div className="space-y-3">
                   <p className="text-xs leading-relaxed text-muted">
@@ -466,21 +469,8 @@ export default function Today() {
                   <div className="flex flex-col gap-5">
                     <div>
                       <div className="mb-0.5 text-xs font-medium text-secondary">Energy tank</div>
-                      <div className="mb-2 text-[11px] text-muted">How much fuel was left in you when you stopped? It shapes tomorrow's pace — and your analytics.</div>
-                      <div className="flex gap-1.5">
-                        {TANK.map(t => (
-                          <button key={t.n} onClick={() => setEnergy(t.n)} className="group flex-1 text-left">
-                            <div
-                              className={`h-8 rounded-lg border transition-all ${energy >= t.n ? 'border-transparent' : 'border-line bg-white/[0.02] group-hover:border-line-hover'}`}
-                              style={energy >= t.n ? { background: `linear-gradient(135deg, ${TANK[energy - 1].color}cc, ${TANK[energy - 1].color}66)`, boxShadow: `0 0 14px ${TANK[energy - 1].color}44` } : undefined}
-                            />
-                            <div className={`mt-1 text-center text-[9.5px] font-medium uppercase tracking-wide ${energy === t.n ? 'text-primary' : 'text-muted'}`}>{t.label}</div>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="mt-1.5 text-center text-[11px] text-secondary">
-                        <span className="font-semibold" style={{ color: TANK[energy - 1].color }}>{TANK[energy - 1].label}</span> — {TANK[energy - 1].desc}
-                      </div>
+                      <div className="mb-2 text-[11px] text-muted">Drag the tank to how much fuel was left when you stopped. It shapes tomorrow's pace — and your analytics.</div>
+                      <EnergyTank value={energy} onChange={setEnergy} />
                     </div>
                     <div>
                       <div className="mb-1.5 text-xs font-medium text-secondary">How did the day fight?</div>
@@ -589,6 +579,171 @@ function StreakRing({ days }: { days: number }) {
         <div className="font-mono text-sm font-bold leading-none text-primary">{days} days</div>
         <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">streak</div>
       </div>
+    </div>
+  )
+}
+
+// ── Energy tank: a liquid gauge you DRAG — the day's fuel, made physical ──
+// Pointer events (not mouse) so it feels native on phones; keyboard arrows
+// and the labels underneath still work for accessibility and quick taps.
+function EnergyTank({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const t = TANK[value - 1]
+  const pct = (value / 5) * 100
+
+  const setFromX = (clientX: number) => {
+    const el = trackRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const rel = (clientX - r.left) / r.width
+    onChange(Math.min(5, Math.max(1, Math.ceil(rel * 5))))
+  }
+
+  return (
+    <div>
+      <div
+        ref={trackRef}
+        role="slider"
+        aria-label="Energy left in the tank"
+        aria-valuemin={1} aria-valuemax={5} aria-valuenow={value} aria-valuetext={t.label}
+        tabIndex={0}
+        onKeyDown={e => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); onChange(Math.max(1, value - 1)) }
+          if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); onChange(Math.min(5, value + 1)) }
+        }}
+        onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); setFromX(e.clientX) }}
+        onPointerMove={e => { if (dragging) setFromX(e.clientX) }}
+        onPointerUp={() => setDragging(false)}
+        onPointerCancel={() => setDragging(false)}
+        className={`relative h-14 touch-none select-none overflow-hidden rounded-2xl border bg-white/[0.02] outline-none ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        style={{
+          borderColor: dragging ? `${t.color}66` : 'var(--edge)',
+          boxShadow: dragging ? `0 0 28px ${t.color}33, inset 0 1px 0 rgba(255,255,255,0.06)` : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+        }}
+      >
+        {/* segment ticks */}
+        {[1, 2, 3, 4].map(i => (
+          <span key={i} className="absolute inset-y-2.5 z-10 w-px bg-white/10" style={{ left: `${i * 20}%` }} />
+        ))}
+        {/* liquid */}
+        <motion.div
+          className="absolute inset-y-0 left-0"
+          animate={{ width: `${pct}%` }}
+          transition={dragging ? { type: 'spring', stiffness: 900, damping: 50 } : { type: 'spring', stiffness: 230, damping: 18 }}
+        >
+          <div className="tank-liquid" style={{ background: `linear-gradient(90deg, ${t.color}26, ${t.color}59 55%, ${t.color}a6)` }} />
+          {/* glowing surface line at the liquid's edge */}
+          <div className="absolute inset-y-1.5 right-0 w-[3px] rounded-full" style={{ background: t.color, filter: `drop-shadow(0 0 8px ${t.color})` }} />
+          {/* bubbles */}
+          {[0, 1, 2, 3, 4].map(i => (
+            <span key={i} className="tank-bubble" style={{ left: `${10 + i * 19}%`, animationDelay: `${i * 0.55}s`, animationDuration: `${2 + (i % 3) * 0.5}s` }} />
+          ))}
+          {/* knob riding the surface */}
+          <motion.div
+            className="absolute right-1 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/30"
+            animate={{ scale: dragging ? 1.2 : 1, rotate: dragging ? [0, -8, 8, 0] : 0 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+            style={{ background: `radial-gradient(circle at 35% 30%, ${t.color}, ${t.color}88)`, boxShadow: `0 0 20px ${t.color}aa, 0 4px 12px rgba(0,0,0,0.45)` }}
+          >
+            <Zap size={15} className="text-white" fill="white" />
+          </motion.div>
+        </motion.div>
+        {/* level word floats in the empty side of the tank */}
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={t.label}
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.16 }}
+            className={`pointer-events-none absolute top-1/2 z-10 -translate-y-1/2 font-mono text-[11px] font-bold uppercase tracking-[0.2em] ${value >= 4 ? 'left-3.5' : 'right-3.5'}`}
+            style={{ color: t.color, textShadow: `0 0 12px ${t.color}66` }}
+          >
+            {t.label}
+          </motion.span>
+        </AnimatePresence>
+      </div>
+      {/* tap targets under each segment */}
+      <div className="mt-1.5 flex">
+        {TANK.map(lv => (
+          <button
+            key={lv.n} type="button" onClick={() => onChange(lv.n)}
+            className={`flex-1 text-center text-[9.5px] font-medium uppercase tracking-wide transition-colors ${value === lv.n ? 'text-primary' : 'text-muted hover:text-secondary'}`}
+          >
+            {lv.label}
+          </button>
+        ))}
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={value}
+          initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.15 }}
+          className="mt-1 text-center text-[11px] text-secondary"
+        >
+          <span className="font-semibold" style={{ color: t.color }}>{t.label}</span> — {t.desc}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ── The day-close seal: a living moon that becomes a green medal ──
+function DayCloseSeal({ done }: { done: boolean }) {
+  return (
+    <div className="relative flex h-11 w-11 items-center justify-center">
+      <motion.span
+        className="absolute inset-0 rounded-full"
+        style={{ background: done ? 'radial-gradient(closest-side, rgba(34,197,94,0.4), transparent)' : 'radial-gradient(closest-side, rgba(139,92,246,0.45), transparent)' }}
+        animate={{ scale: [1, 1.45, 1], opacity: [0.55, 1, 0.55] }}
+        transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      {done && (
+        <>
+          <motion.span className="absolute inset-0 rounded-full border-2 border-success/60"
+            animate={{ scale: [1, 2], opacity: [0.7, 0] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }} />
+          <motion.span className="absolute inset-0 rounded-full border border-success/40"
+            animate={{ scale: [1, 2.6], opacity: [0.5, 0] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeOut', delay: 0.5 }} />
+        </>
+      )}
+      <AnimatePresence mode="wait">
+        {done ? (
+          <motion.svg key="done" viewBox="0 0 24 24" className="relative h-7 w-7"
+            initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 16 }}>
+            <circle cx="12" cy="12" r="10" fill="rgba(34,197,94,0.15)" stroke="#22c55e" strokeWidth="1.5" />
+            <motion.path d="M7.5 12.5l3 3L16.5 9" stroke="#22c55e" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round"
+              initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 0.2, duration: 0.45 }} />
+          </motion.svg>
+        ) : (
+          <motion.div key="moon" className="relative"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1, y: [0, -2.5, 0], rotate: [-6, 6, -6] }}
+            exit={{ scale: 0 }}
+            transition={{
+              y: { duration: 3.4, repeat: Infinity, ease: 'easeInOut' },
+              rotate: { duration: 5.5, repeat: Infinity, ease: 'easeInOut' },
+              scale: { type: 'spring', stiffness: 300, damping: 18 },
+            }}>
+            <svg viewBox="0 0 24 24" className="h-7 w-7">
+              <defs>
+                <linearGradient id="sealMoon" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#c7d2fe" /><stop offset="100%" stopColor="#8b5cf6" />
+                </linearGradient>
+              </defs>
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" fill="url(#sealMoon)" style={{ filter: 'drop-shadow(0 0 6px rgba(139,92,246,0.8))' }} />
+            </svg>
+            {[{ x: -8, y: -3, d: 0 }, { x: 25, y: 3, d: 0.9 }, { x: 20, y: -9, d: 1.7 }].map((s, i) => (
+              <motion.span key={i} className="absolute text-[7px] leading-none text-indigo-200"
+                style={{ left: s.x, top: s.y }}
+                animate={{ opacity: [0.2, 1, 0.2], scale: [0.7, 1.25, 0.7] }}
+                transition={{ duration: 2.1, repeat: Infinity, delay: s.d }}>
+                ✦
+              </motion.span>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

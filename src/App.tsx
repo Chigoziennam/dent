@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useShipLog } from './lib/store'
+import { useDent } from './lib/store'
 import { supabase } from './lib/supabase'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
@@ -20,7 +20,7 @@ import { PublicProfile, PublicChangelog } from './pages/Profile'
 // Picks up the Supabase session after OAuth/magic-link redirects —
 // without this, a successful GitHub login still looked "logged out".
 function AuthSync() {
-  const login = useShipLog(s => s.login)
+  const login = useDent(s => s.login)
   useEffect(() => {
     if (!supabase) return
     supabase.auth.getSession().then(({ data }) => { if (data.session) login() })
@@ -33,7 +33,7 @@ function AuthSync() {
 }
 
 function ThemeSync() {
-  const theme = useShipLog(s => s.profile.theme ?? 'dark')
+  const theme = useDent(s => s.profile.theme ?? 'dark')
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     const meta = document.querySelector('meta[name="theme-color"]')

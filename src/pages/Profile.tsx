@@ -1,14 +1,14 @@
 import { motion } from 'framer-motion'
 import { Link, useParams } from 'react-router-dom'
 import { Globe, Github } from 'lucide-react'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { levelForXP } from '../lib/types'
 import { ACHIEVEMENTS } from '../lib/achievements'
-import { Orbs, CategoryPill, Logo, stagger } from '../components/ui'
+import { Orbs, CategoryPill, Logo, stagger, AnimatedAvatar, CountUp } from '../components/ui'
 import { Markdownish } from '../components/Markdownish'
 
 export function PublicProfile() {
-  const { profile, events, unlocked } = useShipLog()
+  const { profile, events, unlocked } = useDent()
   const { username } = useParams()
   const level = levelForXP(profile.builderScore)
   const recent = [...events].sort((a, b) => b.eventTime.localeCompare(a.eventTime)).slice(0, 10)
@@ -17,9 +17,15 @@ export function PublicProfile() {
   return (
     <PublicFrame>
       <motion.div initial="initial" animate="animate" variants={stagger} className="text-center">
-        <motion.div variants={{ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }}
-          className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-accent/20 text-3xl font-bold text-accent">
-          {profile.displayName[0]}
+        <motion.div variants={{ initial: { opacity: 0, scale: 0.6 }, animate: { opacity: 1, scale: 1 } }}
+          transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+          className="mx-auto flex justify-center">
+          <AnimatedAvatar
+            src={profile.avatarUrl}
+            fallback={profile.avatar ?? profile.displayName[0]}
+            hue={profile.avatarHue ?? 245}
+            size={88}
+          />
         </motion.div>
         <motion.h1 variants={{ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }} className="mt-4 text-2xl font-bold tracking-tight">
           {profile.displayName}
@@ -40,9 +46,9 @@ export function PublicProfile() {
         </motion.div>
 
         <motion.div variants={{ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }} className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 font-mono text-[13px] text-secondary">
-          <span>🔥 {profile.streakCurrent} day streak</span>
-          <span>📦 {profile.totalShips.toLocaleString()} things shipped</span>
-          <span>⭐ Level {level.level}</span>
+          <span>🔥 <CountUp value={profile.streakCurrent} /> day streak</span>
+          <span>📦 <CountUp value={profile.totalShips} /> things shipped</span>
+          <span>⭐ Level <CountUp value={level.level} /></span>
         </motion.div>
       </motion.div>
 
@@ -69,10 +75,19 @@ export function PublicProfile() {
       <div className="mt-10">
         <SectionDivider>Achievements</SectionDivider>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
-          {badges.map(b => (
-            <span key={b.code} title={`${b.name} — ${b.description}`} className="glass flex h-11 w-11 items-center justify-center !rounded-xl text-xl">
+          {badges.map((b, i) => (
+            <motion.span
+              key={b.code}
+              title={`${b.name} — ${b.description}`}
+              initial={{ opacity: 0, y: 14, rotate: -8 }}
+              whileInView={{ opacity: 1, y: 0, rotate: 0 }}
+              viewport={{ once: true }}
+              whileHover={{ scale: 1.22, rotate: 8, y: -4 }}
+              transition={{ type: 'spring', stiffness: 350, damping: 16, delay: i * 0.04 }}
+              className="glass flex h-11 w-11 cursor-default items-center justify-center !rounded-xl text-xl"
+            >
               {b.icon}
-            </span>
+            </motion.span>
           ))}
         </div>
       </div>
@@ -85,7 +100,7 @@ export function PublicProfile() {
 }
 
 export function PublicChangelog() {
-  const { changelog, profile } = useShipLog()
+  const { changelog, profile } = useDent()
   const { username } = useParams()
 
   return (
@@ -124,7 +139,7 @@ function PublicFrame({ children }: { children: React.ReactNode }) {
       <div className="relative z-10 mx-auto max-w-2xl px-5 py-12">
         {children}
         <footer className="mt-16 flex items-center justify-center gap-2 border-t border-line pt-6 text-xs text-muted">
-          <Logo size={16} /> Powered by Nalto · <Link to="/" className="text-accent hover:underline">Get your own ShipLog</Link>
+          <Logo size={16} /> Powered by Nalto · <Link to="/" className="text-accent hover:underline">Make your own dent →</Link>
         </footer>
       </div>
     </div>

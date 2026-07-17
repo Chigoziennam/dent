@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, startOfWeek, addDays, parseISO } from 'date-fns'
 import { Copy, RefreshCw, Send, Check, ExternalLink, Trophy } from 'lucide-react'
-import { useShipLog, todayStr } from '../lib/store'
+import { useDent, todayStr } from '../lib/store'
 import { generateContent, composeUrl } from '../lib/ai'
 import { TONE_META, CATEGORY_META, type ContentPlatform, type Tone, type EventCategory } from '../lib/types'
 import { Page, GlassCard, CountUp, CategoryPill, SectionTitle, stagger } from '../components/ui'
@@ -17,7 +17,7 @@ const TABS: { key: ContentPlatform; label: string }[] = [
 const TONES = Object.keys(TONE_META) as Tone[]
 
 export default function Week() {
-  const { events, dailyLogs, profile, saveContent, publishChangelog } = useShipLog()
+  const { events, dailyLogs, profile, saveContent, publishChangelog } = useDent()
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => format(addDays(weekStart, i), 'yyyy-MM-dd')), [weekStart])
   const weekEvents = useMemo(() => events.filter(e => days.includes(e.eventDate)), [events, days])
@@ -33,7 +33,7 @@ export default function Week() {
   const draftKey = `${tab}-${tone}`
   const draft = drafts[draftKey]
 
-  const bumpAiUsage = useShipLog(s => s.bumpAiUsage)
+  const bumpAiUsage = useDent(s => s.bumpAiUsage)
   const generate = async () => {
     setGenerating(true)
     bumpAiUsage()
@@ -224,7 +224,7 @@ export default function Week() {
             {generating ? (
               <div className="flex items-center gap-2 text-sm text-muted">
                 <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity }}>
-                  ✨ ShipLog AI is writing from your {weekEvents.length} events…
+                  ✨ Dent AI is writing from your {weekEvents.length} events…
                 </motion.span>
               </div>
             ) : draft ? (

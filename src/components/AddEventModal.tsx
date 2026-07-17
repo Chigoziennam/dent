@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, Plus, RotateCw, Link2 } from 'lucide-react'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { CATEGORY_META, type EventCategory } from '../lib/types'
 
 const QUICK_CATS: EventCategory[] = ['feature', 'commit', 'bugfix', 'deployment', 'revenue', 'customer', 'milestone', 'learning', 'idea', 'design']
@@ -13,7 +13,7 @@ const EFFORT = [
 ] as const
 
 export function AddEventModal({ onClose }: { onClose: () => void }) {
-  const { addEvent, events } = useShipLog()
+  const { addEvent, events } = useDent()
   const [tab, setTab] = useState<'new' | 'continue'>('new')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')

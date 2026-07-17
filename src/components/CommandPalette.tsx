@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { Search, Sun, Clock, Sparkles, PenLine, BarChart3, Trophy, Plug, Settings, Plus, ScrollText } from 'lucide-react'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { CategoryPill } from './ui'
 
 interface Item {
@@ -18,7 +18,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const [index, setIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
-  const events = useShipLog(s => s.events)
+  const events = useDent(s => s.events)
 
   useEffect(() => { inputRef.current?.focus() }, [])
 

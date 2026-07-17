@@ -89,6 +89,42 @@ export function Orbs() {
   )
 }
 
+// ── Animated avatar: spinning conic aura + breathing + presence pulse ──
+// The "extreme UI" profile treatment — used in the sidebar, settings and
+// the public profile so the builder always looks alive.
+export function AnimatedAvatar({ src, fallback, hue = 245, size = 40, pulse = true }: {
+  src?: string; fallback: string; hue?: number; size?: number; pulse?: boolean
+}) {
+  return (
+    <div className="avatar-ring relative shrink-0 rounded-full" style={{ width: size, height: size }}>
+      <motion.div
+        className="relative z-10 flex h-full w-full items-center justify-center overflow-hidden rounded-full"
+        style={{
+          background: `linear-gradient(135deg, hsl(${hue} 70% 55% / 0.5), hsl(${hue + 60} 70% 55% / 0.35))`,
+          border: '2px solid var(--bg)',
+          fontSize: size * 0.4,
+        }}
+        animate={{ scale: [1, 1.035, 1] }}
+        transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        {src
+          ? <img src={src} alt="" className="h-full w-full object-cover" />
+          : <span className="font-bold text-white" style={{ textShadow: '0 1px 8px rgba(0,0,0,0.4)' }}>{fallback}</span>}
+      </motion.div>
+      {pulse && (
+        <span
+          className="absolute bottom-0 right-0 z-20 rounded-full bg-success"
+          style={{
+            width: Math.max(8, size * 0.22), height: Math.max(8, size * 0.22),
+            border: '2px solid var(--bg)',
+            boxShadow: '0 0 8px rgba(34,197,94,0.9)',
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
 export function CategoryPill({ category }: { category: EventCategory }) {
   const meta = CATEGORY_META[category]
   return (

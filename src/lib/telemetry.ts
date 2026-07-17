@@ -1,5 +1,5 @@
 // ── Founder telemetry ─────────────────────────────────────────
-// Fire-and-forget signals to YOUR Supabase (the ShipLog owner's),
+// Fire-and-forget signals to YOUR Supabase (the Dent owner's),
 // so you can watch first users: signups, ships, AI usage, upgrades.
 // Users' own Supabase creds (Integrations page) are separate — that
 // syncs THEIR log to THEIR database. This is product analytics only:

@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send, Sparkles } from 'lucide-react'
-import { useShipLog } from '../lib/store'
-import { copilotAnswer, SHIPPER_QUOTES } from '../lib/ai'
+import { useDent } from '../lib/store'
+import { copilotAnswer, copilotBriefing, aiMode, SHIPPER_QUOTES } from '../lib/ai'
 
 interface Msg { role: 'user' | 'copilot'; text: string }
 
 const QUICK = ['How\'s my week?', 'When did I fix auth?', 'Motivate me', 'What should I ship next?']
 
 export function Copilot() {
-  const { events, dailyLogs, profile } = useShipLog()
+  const { events, dailyLogs, profile } = useDent()
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -22,6 +22,25 @@ export function Copilot() {
     const t = setInterval(() => setQuoteIdx(i => (i + 1) % SHIPPER_QUOTES.length), 20_000)
     return () => clearInterval(t)
   }, [])
+
+  // AUTOMATED: the co-pilot speaks first. On first open it reads the log
+  // and delivers a briefing — no question needed. Runs once per session.
+  const briefed = useRef(false)
+  useEffect(() => {
+    if (!open || briefed.current || msgs.length > 0) return
+    briefed.current = true
+    setThinking(true)
+    copilotBriefing({
+      events, dailyLogs,
+      streak: profile.streakCurrent,
+      projectName: profile.projectName,
+      displayName: profile.displayName,
+    }).then(text => {
+      setMsgs(m => (m.length === 0 ? [{ role: 'copilot', text }] : m))
+      setThinking(false)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -64,6 +83,21 @@ export function Copilot() {
         <motion.span animate={{ rotate: open ? 90 : 0 }} className="text-xl">
           {open ? <X size={20} className="text-white" /> : '🤖'}
         </motion.span>
+        {/* attention ping until the first briefing is read */}
+        {!open && !briefed.current && (
+          <>
+            <motion.span
+              className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-success"
+              animate={{ scale: [1, 1.25, 1] }}
+              transition={{ duration: 1.2, repeat: Infinity }}
+            />
+            <motion.span
+              className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-success"
+              animate={{ scale: [1, 2.4], opacity: [0.7, 0] }}
+              transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
+            />
+          </>
+        )}
       </motion.button>
 
       <AnimatePresence>
@@ -82,9 +116,19 @@ export function Copilot() {
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent/20 text-base">🤖</span>
                 <div className="min-w-0">
                   <div className="text-[13px] font-bold">Co-pilot</div>
-                  <div className="text-[10px] text-muted">has read all {events.length} of your ships</div>
+                  <div className="text-[10px] text-muted">
+                    {aiMode() === 'local'
+                      ? `local brain · knows all ${events.length} ships`
+                      : `live AI · has read all ${events.length} of your ships`}
+                  </div>
                 </div>
-                <span className="ml-auto flex h-2 w-2 rounded-full bg-success shadow-[0_0_8px_rgba(34,197,94,0.8)]" />
+                <span
+                  className="ml-auto flex h-2 w-2 rounded-full"
+                  title={aiMode() === 'n8n' ? 'Wired to your n8n brain' : aiMode() === 'direct' ? 'Direct Claude API' : 'Offline engine — set VITE_N8N_WEBHOOK_BASE to go live'}
+                  style={aiMode() === 'local'
+                    ? { background: '#f59e0b', boxShadow: '0 0 8px rgba(245,158,11,0.8)' }
+                    : { background: '#22c55e', boxShadow: '0 0 8px rgba(34,197,94,0.8)' }}
+                />
               </div>
               <AnimatePresence mode="wait">
                 <motion.p
@@ -99,21 +143,6 @@ export function Copilot() {
 
             {/* Thread */}
             <div ref={scrollRef} className="flex-1 space-y-2.5 overflow-y-auto p-4">
-              {msgs.length === 0 && (
-                <div className="space-y-2">
-                  <p className="text-[12.5px] leading-relaxed text-secondary">
-                    I've read your whole log — every commit, every 2am fix. Ask me anything about your building history, or lean on me when the day gets heavy.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {QUICK.map(qk => (
-                      <button key={qk} onClick={() => ask(qk)}
-                        className="rounded-full border border-line px-2.5 py-1.5 text-[11px] text-secondary transition-colors hover:border-accent/50 hover:text-accent">
-                        {qk}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
               {msgs.map((m, i) => (
                 <motion.div
                   key={i}
@@ -133,6 +162,18 @@ export function Copilot() {
                     <motion.span key={i} className="h-1.5 w-1.5 rounded-full bg-accent"
                       animate={{ opacity: [0.3, 1, 0.3], y: [0, -3, 0] }}
                       transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }} />
+                  ))}
+                  {msgs.length === 0 && <span className="ml-1 text-[10.5px] text-muted">reading your log…</span>}
+                </div>
+              )}
+              {/* quick prompts stay visible under the opening briefing */}
+              {!thinking && msgs.length <= 1 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {QUICK.map(qk => (
+                    <button key={qk} onClick={() => ask(qk)}
+                      className="rounded-full border border-line px-2.5 py-1.5 text-[11px] text-secondary transition-colors hover:border-accent/50 hover:text-accent">
+                      {qk}
+                    </button>
                   ))}
                 </div>
               )}

@@ -6,12 +6,12 @@ import { supabaseReady } from '../lib/supabase'
 
 const AI_LIMIT = 500 // ≈ $9 of usage on Sonnet-class models
 import { Link } from 'react-router-dom'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { TONE_META, type Tone } from '../lib/types'
-import { Page, GlassCard, SectionTitle } from '../components/ui'
+import { Page, GlassCard, SectionTitle, AnimatedAvatar } from '../components/ui'
 
 export default function Settings() {
-  const { profile, updateProfile, logout, aiUsed, creds, setCreds } = useShipLog()
+  const { profile, updateProfile, logout, aiUsed, creds, setCreds } = useDent()
   const [form, setForm] = useState(profile)
   const [saved, setSaved] = useState(false)
   const [creditToast, setCreditToast] = useState(false)
@@ -28,7 +28,7 @@ export default function Settings() {
 
   // Data ownership: one click, everything you ever logged
   const exportData = () => {
-    const s = useShipLog.getState()
+    const s = useDent.getState()
     const blob = new Blob([JSON.stringify({
       exportedAt: new Date().toISOString(),
       profile: s.profile,
@@ -40,7 +40,7 @@ export default function Settings() {
     }, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `shiplog-export-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `dent-export-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -50,17 +50,15 @@ export default function Settings() {
       <GlassCard>
         <SectionTitle>Your builder identity</SectionTitle>
         <div className="flex flex-wrap items-start gap-5">
-          {/* Current avatar preview */}
-          <div className="flex flex-col items-center gap-2">
-            <div
-              className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl text-4xl"
-              style={{ background: `linear-gradient(135deg, hsl(${form.avatarHue ?? 245} 70% 55% / 0.35), hsl(${(form.avatarHue ?? 245) + 60} 70% 55% / 0.25))`, border: '1px solid rgba(255,255,255,0.12)' }}
-            >
-              {form.avatarUrl
-                ? <img src={form.avatarUrl} alt="Your avatar" className="h-full w-full object-cover" />
-                : (form.avatar ?? '🧑‍💻')}
-            </div>
-            <span className="text-[10px] text-muted">you, currently</span>
+          {/* Current avatar preview — live, exactly as the world sees it */}
+          <div className="flex flex-col items-center gap-2.5 pt-1">
+            <AnimatedAvatar
+              src={form.avatarUrl}
+              fallback={form.avatar ?? '🧑‍💻'}
+              hue={form.avatarHue ?? 245}
+              size={80}
+            />
+            <span className="text-[10px] text-muted">you, live</span>
           </div>
 
           <div className="min-w-0 flex-1">

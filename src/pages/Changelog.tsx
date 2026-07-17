@@ -1,12 +1,12 @@
 import { motion } from 'framer-motion'
 import { ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { Page, stagger } from '../components/ui'
 import { Markdownish } from '../components/Markdownish'
 
 export default function Changelog() {
-  const { changelog, profile } = useShipLog()
+  const { changelog, profile } = useDent()
 
   return (
     <Page className="max-w-3xl">

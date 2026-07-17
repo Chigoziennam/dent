@@ -6,8 +6,8 @@ import {
   Search, ChevronsLeft, ChevronsRight, User, Sparkles,
 } from 'lucide-react'
 import { format } from 'date-fns'
-import { useShipLog } from '../lib/store'
-import { Logo, StreakBadge, SpaceBackdrop } from './ui'
+import { useDent } from '../lib/store'
+import { Logo, StreakBadge, SpaceBackdrop, AnimatedAvatar } from './ui'
 import { CommandPalette } from './CommandPalette'
 import { AchievementToast } from './AchievementToast'
 import { Copilot } from './Copilot'
@@ -37,7 +37,7 @@ export default function Shell() {
   const [collapsed, setCollapsed] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [now, setNow] = useState(new Date())
-  const profile = useShipLog(s => s.profile)
+  const profile = useDent(s => s.profile)
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -57,7 +57,7 @@ export default function Shell() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const pageTitle = [...NAV, ...NAV2].find(n => location.pathname.startsWith(n.to))?.label ?? 'ShipLog'
+  const pageTitle = [...NAV, ...NAV2].find(n => location.pathname.startsWith(n.to))?.label ?? 'Dent'
 
   return (
     <div className="flex min-h-dvh bg-base">
@@ -73,7 +73,7 @@ export default function Shell() {
       >
         <div className="flex items-center gap-2.5 px-4 pt-5 pb-2">
           <button onClick={() => navigate('/app/today')} className="shrink-0"><Logo size={30} /></button>
-          {!collapsed && <span className="text-[15px] font-bold tracking-tight">ShipLog</span>}
+          {!collapsed && <span className="text-[15px] font-bold tracking-tight">Dent</span>}
           <button
             onClick={() => setCollapsed(c => !c)}
             className="ml-auto rounded-md p-1 text-muted hover:bg-white/5 hover:text-secondary"
@@ -103,14 +103,12 @@ export default function Shell() {
 
         <div className="border-t border-line p-3">
           <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5">
-            <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full text-base"
-              style={{ background: `linear-gradient(135deg, hsl(${profile.avatarHue ?? 245} 70% 55% / 0.35), hsl(${(profile.avatarHue ?? 245) + 60} 70% 55% / 0.25))` }}
-            >
-              {profile.avatarUrl
-                ? <img src={profile.avatarUrl} alt="" className="h-full w-full object-cover" />
-                : (profile.avatar ?? profile.displayName[0])}
-            </div>
+            <AnimatedAvatar
+              src={profile.avatarUrl}
+              fallback={profile.avatar ?? profile.displayName[0]}
+              hue={profile.avatarHue ?? 245}
+              size={34}
+            />
             {!collapsed && (
               <div className="min-w-0">
                 <div className="truncate text-[13px] font-medium">{profile.displayName}</div>

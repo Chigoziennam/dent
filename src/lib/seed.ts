@@ -28,7 +28,7 @@ const FEATURES = [
   'Added streak system with fire gradient', 'Shipped contribution heatmap',
 ]
 const DEPLOYS = [
-  'Deployed fee portal v0.3 to production', 'Deployed shiplog.dev preview',
+  'Deployed fee portal v0.3 to production', 'Deployed dent.app preview',
   'Deployed hotfix for auth callback', 'Production deploy — landing page v2',
   'Deployed edge function: weekly-digest', 'Deployed n8n workflow updates',
 ]
@@ -46,7 +46,7 @@ const CUSTOMERS = [
   '3 new waitlist signups', 'Demo call booked with second school',
 ]
 const MILESTONES = [
-  'Crossed 100 total commits on ShipLog', '21-day shipping streak',
+  'Crossed 100 total commits on Dent', '21-day shipping streak',
   'First external user logged an event', 'Landing page hit 1,000 visits',
 ]
 const LEARNINGS = [

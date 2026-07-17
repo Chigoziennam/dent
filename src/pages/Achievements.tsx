@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { ACHIEVEMENTS, RARITY_META } from '../lib/achievements'
 import { Page, stagger, CountUp } from '../components/ui'
 import type { Rarity } from '../lib/types'
@@ -36,7 +36,7 @@ function Medal({ rarity, icon, earned }: { rarity: Rarity; icon: string; earned:
 }
 
 export default function Achievements() {
-  const { unlocked, events, dailyLogs, content, profile } = useShipLog()
+  const { unlocked, events, dailyLogs, content, profile } = useDent()
   const count = Object.keys(unlocked).length
   const earnedXP = ACHIEVEMENTS.filter(a => unlocked[a.code]).reduce((s, a) => s + a.xp, 0)
 

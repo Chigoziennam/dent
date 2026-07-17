@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useShipLog } from '../lib/store'
+import { useDent } from '../lib/store'
 import { ACHIEVEMENTS, RARITY_META } from '../lib/achievements'
 
 export function AchievementToast() {
-  const justUnlocked = useShipLog(s => s.justUnlocked)
-  const clear = useShipLog(s => s.clearUnlockToast)
+  const justUnlocked = useDent(s => s.justUnlocked)
+  const clear = useDent(s => s.clearUnlockToast)
   const def = ACHIEVEMENTS.find(a => a.code === justUnlocked)
 
   useEffect(() => {

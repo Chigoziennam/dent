@@ -9,7 +9,7 @@
 // All writes are fire-and-forget: the app never blocks on the network,
 // local state is the source of truth, the cloud is the mirror n8n reads.
 import { supabase } from './supabase'
-import type { ShipEvent, DailyLog, Profile, ChangelogEntry } from './types'
+import type { ShipEvent, DailyLog, Profile, ChangelogEntry, ContentPiece } from './types'
 
 // ── Sync health — failures must be VISIBLE, never silent ──
 // Every push records its outcome here; the Integrations page reads it so a
@@ -26,6 +26,61 @@ function noteResult(scope: string, error: { message: string } | null) {
     lastSyncError = null
   }
 }
+
+// ── Retry queue — a failed save is retried, never lost ──
+// Fire-and-forget used to mean fire-and-forget-forever: an expired session or
+// a dead connection silently dropped the row. Now every failed write lands in
+// localStorage and is retried on reconnect / next login / every minute.
+type QueueItem = { table: string; row: Record<string, unknown>; conflict?: string }
+const QKEY = 'shiplog-sync-queue'
+function loadQueue(): QueueItem[] {
+  try { return JSON.parse(localStorage.getItem(QKEY) ?? '[]') } catch { return [] }
+}
+function saveQueue(q: QueueItem[]) {
+  try { localStorage.setItem(QKEY, JSON.stringify(q.slice(0, 500))) } catch { /* storage full — drop */ }
+}
+function enqueue(item: QueueItem) { saveQueue([...loadQueue(), item]) }
+
+// One writer for every table. `conflict` turns the insert into an upsert.
+// Duplicate rows (23505) are success — the data is already there.
+async function send(item: QueueItem): Promise<boolean> {
+  if (!supabase) return false
+  const { error } = item.conflict
+    ? await supabase.from(item.table).upsert(item.row, { onConflict: item.conflict, ignoreDuplicates: item.table === 'ship_events' })
+    : await supabase.from(item.table).insert(item.row)
+  if (error && error.code === '23505') { noteResult(item.table, null); return true }
+  // 42P10 = the unique index for this ON CONFLICT doesn't exist yet
+  // (upgrade SQL not run) — fall back to a plain insert so nothing is lost.
+  if (error && error.code === '42P10') {
+    const { error: e2 } = await supabase.from(item.table).insert(item.row)
+    noteResult(item.table, e2 && e2.code !== '23505' ? e2 : null)
+    return !e2 || e2.code === '23505'
+  }
+  noteResult(item.table, error)
+  return !error
+}
+
+function sendOrQueue(item: QueueItem) {
+  send(item).then(ok => { if (!ok) enqueue(item) }).catch(() => enqueue(item))
+}
+
+// Retry everything that ever failed. Safe to call any time.
+let flushing = false
+export async function flushSyncQueue() {
+  if (flushing || !supabase) return
+  const q = loadQueue()
+  if (q.length === 0) return
+  flushing = true
+  try {
+    const failed: QueueItem[] = []
+    for (const item of q) {
+      const ok = await send(item).catch(() => false)
+      if (!ok) failed.push(item)
+    }
+    saveQueue(failed)
+  } finally { flushing = false }
+}
+export const pendingSyncCount = () => loadQueue().length
 
 // Can we actually reach the Supabase project? A deleted/paused project fails
 // DNS entirely — fetch throws — which is different from an RLS/schema error.
@@ -152,42 +207,66 @@ export function pushProfile(userId: string, p: Partial<Profile> & { email?: stri
 }
 
 export function pushEvent(userId: string, e: ShipEvent) {
-  if (!supabase) return
-  supabase.from('ship_events').insert({
-    user_id: userId,
-    source: e.source,
-    category: e.category,
-    title: e.title,
-    description: e.description ?? null,
-    importance: e.importance,
-    is_pinned: e.isPinned,
-    event_date: e.eventDate,
-    event_time: e.eventTime,
-    repo: e.repo ?? null,
-  }).then(({ error }) => noteResult('event', error))
+  // Upsert on (user_id, event_time, title) — a double login can never
+  // duplicate a ship again (needs the unique index from upgrade-3 SQL).
+  sendOrQueue({
+    table: 'ship_events',
+    conflict: 'user_id,event_time,title',
+    row: {
+      user_id: userId,
+      source: e.source,
+      category: e.category,
+      title: e.title,
+      description: e.description ?? null,
+      importance: e.importance,
+      is_pinned: e.isPinned,
+      event_date: e.eventDate,
+      event_time: e.eventTime,
+      repo: e.repo ?? null,
+    },
+  })
 }
 
 export function pushDailyLog(userId: string, l: Omit<DailyLog, 'id'>) {
-  if (!supabase) return
-  supabase.from('daily_logs').upsert({
-    user_id: userId,
-    log_date: l.logDate,
-    what_i_built: l.whatIBuilt,
-    what_blocked_me: l.whatBlockedMe,
-    what_i_learned: l.whatILearned,
-    energy_level: l.energyLevel,
-    mood: l.mood,
-  }, { onConflict: 'user_id,log_date' }).then(({ error }) => noteResult('daily log', error))
+  sendOrQueue({
+    table: 'daily_logs',
+    conflict: 'user_id,log_date',
+    row: {
+      user_id: userId,
+      log_date: l.logDate,
+      what_i_built: l.whatIBuilt,
+      what_blocked_me: l.whatBlockedMe,
+      what_i_learned: l.whatILearned,
+      energy_level: l.energyLevel,
+      mood: l.mood,
+    },
+  })
 }
 
 export function pushChangelog(userId: string, c: Omit<ChangelogEntry, 'id' | 'publishedAt'>) {
-  if (!supabase) return
-  supabase.from('changelog_entries').insert({
-    user_id: userId,
-    version_tag: c.versionTag ?? null,
-    title: c.title,
-    body: c.body,
-  }).then(({ error }) => noteResult('changelog', error))
+  sendOrQueue({
+    table: 'changelog_entries',
+    row: {
+      user_id: userId,
+      version_tag: c.versionTag || null,
+      title: c.title,
+      body: c.body,
+    },
+  })
+}
+
+export function pushContent(userId: string, c: Omit<ContentPiece, 'id' | 'createdAt'>) {
+  sendOrQueue({
+    table: 'content_pieces',
+    row: {
+      user_id: userId,
+      platform: c.platform,
+      tone: c.tone,
+      title: c.title ?? null,
+      body: c.body,
+      status: c.status,
+    },
+  })
 }
 
 // Payments are recorded even for visitors who aren't signed in —
@@ -196,15 +275,18 @@ export function pushChangelog(userId: string, c: Omit<ChangelogEntry, 'id' | 'pu
 export function recordPayment(p: { email: string; amountMinor: number; currency: 'NGN' | 'USD'; tier: string; cycle: string; reference?: string }) {
   if (!supabase) return
   supabase.auth.getUser().then(({ data }) => {
-    supabase!.from('payments').insert({
-      user_id: data.user?.id ?? null,
-      email: p.email,
-      amount_kobo: p.amountMinor,
-      currency: p.currency,
-      tier: p.tier,
-      cycle: p.cycle,
-      paystack_ref: p.reference ?? null,
-      status: 'success-client',
-    }).then(({ error }) => noteResult('payment', error))
+    sendOrQueue({
+      table: 'payments',
+      row: {
+        user_id: data.user?.id ?? null,
+        email: p.email,
+        amount_kobo: p.amountMinor,
+        currency: p.currency,
+        tier: p.tier,
+        cycle: p.cycle,
+        paystack_ref: p.reference ?? null,
+        status: 'success-client',
+      },
+    })
   })
 }

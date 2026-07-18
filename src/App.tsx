@@ -2,7 +2,9 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useDent } from './lib/store'
 import { supabase } from './lib/supabase'
-import { userFromSession } from './lib/sync'
+import { flushSyncQueue, userFromSession } from './lib/sync'
+import { track } from './lib/telemetry'
+import InstallPrompt from './components/InstallPrompt'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Pricing from './pages/Pricing'
@@ -37,6 +39,20 @@ function AuthSync() {
   return null
 }
 
+// Product analytics heartbeat + the sync retry loop: anything that failed to
+// save (offline, expired session) is pushed up on reconnect and every minute.
+function SyncPulse() {
+  useEffect(() => {
+    track('session_start')
+    flushSyncQueue()
+    const onOnline = () => flushSyncQueue()
+    window.addEventListener('online', onOnline)
+    const t = setInterval(flushSyncQueue, 60_000)
+    return () => { window.removeEventListener('online', onOnline); clearInterval(t) }
+  }, [])
+  return null
+}
+
 function ThemeSync() {
   const theme = useDent(s => s.profile.theme ?? 'dark')
   useEffect(() => {
@@ -52,6 +68,8 @@ export default function App() {
     <BrowserRouter>
       <ThemeSync />
       <AuthSync />
+      <SyncPulse />
+      <InstallPrompt />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />

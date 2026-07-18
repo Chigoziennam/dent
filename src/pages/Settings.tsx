@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { LogOut, ExternalLink, Check, Download, Zap } from 'lucide-react'
 import { supabaseReady } from '../lib/supabase'
+import { pendingSyncCount, syncHealth } from '../lib/sync'
 
 import { Link } from 'react-router-dom'
 import { useDent } from '../lib/store'
@@ -17,6 +18,8 @@ export default function Settings() {
   const [saved, setSaved] = useState(false)
   const [creditToast, setCreditToast] = useState(false)
   const navigate = useNavigate()
+  const syncErr = syncHealth().error
+  const pending = pendingSyncCount()
 
   const save = () => {
     updateProfile(form)
@@ -65,7 +68,7 @@ export default function Settings() {
             <div className="mb-1.5 text-xs font-medium text-secondary">Tech avatars</div>
             <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
               {TECH_AVATARS.map(url => (
-                <button key={url} onClick={() => setForm({ ...form, avatarUrl: url })}
+                <button key={url} onClick={() => { setForm({ ...form, avatarUrl: url }); updateProfile({ avatarUrl: url }) }}
                   className={`overflow-hidden rounded-xl border transition-all ${form.avatarUrl === url ? 'scale-110 border-accent shadow-[0_0_16px_rgba(99,102,241,0.4)]' : 'border-line opacity-75 hover:scale-105 hover:opacity-100'}`}>
                   <img src={url} alt="avatar option" loading="lazy" className="aspect-square w-full bg-white/[0.03] object-cover" />
                 </button>
@@ -75,7 +78,7 @@ export default function Settings() {
             <div className="mt-3.5 mb-1.5 text-xs font-medium text-secondary">Or keep it minimal</div>
             <div className="flex flex-wrap gap-1.5">
               {AVATARS.map(a => (
-                <button key={a} onClick={() => setForm({ ...form, avatar: a, avatarUrl: undefined })}
+                <button key={a} onClick={() => { setForm({ ...form, avatar: a, avatarUrl: undefined }); updateProfile({ avatar: a, avatarUrl: undefined }) }}
                   className={`flex h-9 w-9 items-center justify-center rounded-xl border text-lg transition-all ${!form.avatarUrl && form.avatar === a ? 'border-accent bg-accent/20 scale-110' : 'border-line opacity-70 hover:opacity-100'}`}>
                   {a}
                 </button>
@@ -85,7 +88,7 @@ export default function Settings() {
             <div className="mt-3.5 mb-1.5 text-xs font-medium text-secondary">Ring color</div>
             <div className="flex gap-1.5">
               {HUES.map(h => (
-                <button key={h} onClick={() => setForm({ ...form, avatarHue: h })}
+                <button key={h} onClick={() => { setForm({ ...form, avatarHue: h }); updateProfile({ avatarHue: h }) }}
                   aria-label={`hue ${h}`}
                   className={`h-6 w-6 rounded-full border-2 transition-transform ${form.avatarHue === h ? 'scale-125 border-white/80' : 'border-transparent'}`}
                   style={{ background: `linear-gradient(135deg, hsl(${h} 70% 55%), hsl(${h + 60} 70% 55%))` }} />
@@ -122,7 +125,7 @@ export default function Settings() {
         <div className="text-xs font-medium text-secondary">Default writing voice</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {(Object.keys(TONE_META) as Tone[]).map(t => (
-            <button key={t} onClick={() => setForm({ ...form, tone: t })} title={TONE_META[t].hint}
+            <button key={t} onClick={() => { setForm({ ...form, tone: t }); updateProfile({ tone: t }) }} title={TONE_META[t].hint}
               className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${form.tone === t ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted'}`}>
               {TONE_META[t].label}
             </button>
@@ -207,14 +210,23 @@ export default function Settings() {
           >
             <Download size={14} /> Export everything as JSON
           </motion.button>
-          <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold ${supabaseReady ? 'bg-success/15 text-success' : 'bg-white/5 text-muted'}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${supabaseReady ? 'bg-success' : 'bg-muted'}`} />
-            Supabase {supabaseReady ? 'connected' : 'not configured'}
+          <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold ${syncErr ? 'bg-red-400/15 text-red-400' : supabaseReady ? 'bg-success/15 text-success' : 'bg-white/5 text-muted'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${syncErr ? 'bg-red-400' : supabaseReady ? 'bg-success' : 'bg-muted'}`} />
+            {syncErr ? 'Cloud sync error' : supabaseReady ? 'Cloud sync on' : 'Cloud not configured'}
           </span>
+          {pending > 0 && (
+            <span className="rounded-full bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-secondary">
+              {pending} change{pending === 1 ? '' : 's'} waiting to sync
+            </span>
+          )}
         </div>
         <p className="mt-2.5 text-[11px] leading-relaxed text-muted">
           Your log belongs to you — the export includes every event, reflection, draft and achievement.
-          {supabaseReady ? ' Cloud sync activates with the backend launch.' : ' Add your Supabase keys to .env to enable cloud sync.'}
+          {syncErr
+            ? ` Last cloud save failed (${syncErr}) — changes are queued and retried automatically.`
+            : supabaseReady
+              ? ' Every ship, daily log and post is backed up to the cloud as you go.'
+              : ' Add your Supabase keys to .env to enable cloud sync.'}
         </p>
       </GlassCard>
 

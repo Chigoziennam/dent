@@ -5,8 +5,8 @@ import { generateSeed } from './seed'
 import { track } from './telemetry'
 import { supabase } from './supabase'
 import {
-  fetchCloudData, fetchCloudProfile, pushChangelog, pushDailyLog,
-  pushEvent, pushProfile, type CloudUser,
+  fetchCloudData, fetchCloudProfile, flushSyncQueue, pushChangelog,
+  pushContent, pushDailyLog, pushEvent, pushProfile, type CloudUser,
 } from './sync'
 import type {
   ShipEvent, DailyLog, Profile, ContentPiece, ChangelogEntry,
@@ -14,6 +14,11 @@ import type {
 } from './types'
 import { ACHIEVEMENTS } from './achievements'
 import { entitlementsFor, weekKey, monthKey } from './plan'
+
+// Which user this tab has already merged cloud data for — realLogin fires
+// more than once per page load (getSession + onAuthStateChange), and the
+// heavy merge/backfill must only ever run once per user per tab.
+let hydratedFor: string | null = null
 
 interface DentState {
   profile: Profile
@@ -167,6 +172,11 @@ export const useDent = create<DentState>()(
       // "forgetting" people every time they sign out and back in.
       realLogin: async (user) => {
         const s = get()
+        // getSession() AND onAuthStateChange both fire realLogin on every page
+        // load. Running the cloud merge twice in parallel raced its own dedup
+        // check and duplicated every backfilled ship. Hydrate once per user.
+        const alreadyHydrated = hydratedFor === user.id
+        hydratedFor = user.id
         const switchingOwner = s.seeded || (!!s.userId && s.userId !== user.id)
         if (switchingOwner) {
           track('real_login_fresh')
@@ -202,6 +212,7 @@ export const useDent = create<DentState>()(
             },
           })
         }
+        if (alreadyHydrated) return
         // Mirror down whatever the cloud already knows and MERGE it with local —
         // union by id / date, so nothing on either side is lost. Then push the
         // other direction: anything this device has that the cloud is missing
@@ -272,6 +283,8 @@ export const useDent = create<DentState>()(
             }))
           }
         } catch { /* offline is fine — local wins */ }
+        // Anything that failed to save while signed out goes up now.
+        flushSyncQueue()
       },
 
       completeOnboarding: (o) => {
@@ -386,6 +399,7 @@ export const useDent = create<DentState>()(
           justUnlocked: ach.newCode,
           profile: { ...s.profile, builderScore: s.profile.builderScore + 15 + ach.bonusXP },
         })
+        if (s.userId) pushContent(s.userId, c)
       },
 
       publishChangelog: (entry) => {

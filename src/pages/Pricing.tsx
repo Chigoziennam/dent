@@ -90,16 +90,25 @@ const TIERS = [
   },
 ]
 
+// Paystack on this account charges NAIRA only. Dollar buyers still pay the
+// full $ price — we bill its naira equivalent at this rate, and their bank
+// converts. Update the rate in .env (VITE_USD_NGN_RATE) as the market moves.
+const USD_NGN_RATE = Number(import.meta.env.VITE_USD_NGN_RATE) || 1600
+
 // The exact charge for a tier. Yearly bills 12× the per-month rate, once.
+// billNgn is what Paystack actually charges: local ₦ price for naira buyers,
+// $-price × rate for dollar buyers (international pricing, settled in ₦).
 function quote(tierName: string, currency: Currency, yearly: boolean) {
   const perMonthNgn = PRICES[tierName]?.NGN[yearly ? 'y' : 'm'] ?? 0
   const perMonthUsd = PRICES[tierName]?.USD[yearly ? 'y' : 'm'] ?? 0
+  const chargeNgn = yearly ? perMonthNgn * 12 : perMonthNgn
+  const chargeUsd = yearly ? perMonthUsd * 12 : perMonthUsd
   return {
     tier: tierName,
     cycle: (yearly ? 'yearly' : 'monthly') as 'yearly' | 'monthly',
     perMonthNgn, perMonthUsd,
-    chargeNgn: yearly ? perMonthNgn * 12 : perMonthNgn,
-    chargeUsd: yearly ? perMonthUsd * 12 : perMonthUsd,
+    chargeNgn, chargeUsd,
+    billNgn: currency === 'NGN' ? chargeNgn : chargeUsd * USD_NGN_RATE,
     currency,
   }
 }
@@ -130,25 +139,27 @@ export default function Pricing() {
     setConfirm(q)
   }
 
-  // Step 2 — only after the user confirms the exact amount do we charge,
-  // in the currency THEY chose: naira pays ₦, dollar pays $.
+  // Step 2 — only after the user confirms the exact amount do we charge.
+  // Every charge goes through in naira (the account's settlement currency);
+  // dollar buyers pay the $ price converted at USD_NGN_RATE — any Visa or
+  // Mastercard worldwide can pay a naira charge, the bank does the FX.
   const pay = async () => {
     if (!confirm) return
     if (!email.includes('@')) { setEmailErr(true); return }
     setPaying(true)
     await loadPaystack()
     const Pop = (window as unknown as { PaystackPop: new () => { newTransaction: (o: Record<string, unknown>) => void } }).PaystackPop
-    const amountMinor = (confirm.currency === 'NGN' ? confirm.chargeNgn : confirm.chargeUsd) * 100 // kobo / cents
+    const amountMinor = Math.round(confirm.billNgn * 100) // kobo
     new Pop().newTransaction({
       key: PAYSTACK_PUBLIC_KEY,
       email,
       amount: amountMinor,
-      currency: confirm.currency,
-      metadata: { tier: confirm.tier, cycle: confirm.cycle },
+      currency: 'NGN',
+      metadata: { tier: confirm.tier, cycle: confirm.cycle, priced_in: confirm.currency },
       onSuccess: (tx: { reference?: string }) => {
         // Activate EXACTLY the plan they paid for, and sync the tier to cloud.
         updateProfile({ tier: confirm.tier === 'CEO Mode' ? 'team' : 'pro' })
-        recordPayment({ email, amountMinor, currency: confirm.currency, tier: confirm.tier, cycle: confirm.cycle, reference: tx?.reference })
+        recordPayment({ email, amountMinor, currency: 'NGN', tier: confirm.tier, cycle: confirm.cycle, reference: tx?.reference })
         track('payment_success', { tier: confirm.tier, cycle: confirm.cycle, currency: confirm.currency })
         setPaying(false)
         setConfirm(null)
@@ -158,15 +169,7 @@ export default function Pricing() {
       onCancel: () => { setPaying(false) },
       onError: () => {
         setPaying(false)
-        if (confirm.currency === 'USD') {
-          // USD isn't enabled on this Paystack account (yet) — flip the SAME
-          // confirmation to naira so the buyer can finish in one tap instead
-          // of hitting a dead end. Amount shown updates before any charge.
-          setConfirm(c => (c ? { ...c, currency: 'NGN' } : c))
-          setPayMsg(`Dollar charges aren't enabled yet — switched you to naira: ₦${confirm.chargeNgn.toLocaleString()} (same plan). Confirm again to pay.`)
-        } else {
-          setPayMsg('Payment failed — nothing was charged. Please try again.')
-        }
+        setPayMsg('Payment failed — nothing was charged. Please try again.')
         setTimeout(() => setPayMsg(null), 6000)
       },
     })
@@ -327,7 +330,7 @@ export default function Pricing() {
                     ) : (
                       <>
                         <span className="font-mono text-3xl font-bold text-primary">${confirm.chargeUsd.toLocaleString()}</span>
-                        <span className="text-sm text-secondary">≈ ₦{confirm.chargeNgn.toLocaleString()}</span>
+                        <span className="text-sm text-secondary">billed as ₦{confirm.billNgn.toLocaleString()}</span>
                       </>
                     )}
                   </div>
@@ -337,8 +340,8 @@ export default function Pricing() {
                           ? `Billed once for the year — ₦${confirm.perMonthNgn.toLocaleString()}/mo × 12.`
                           : `Billed monthly — ₦${confirm.perMonthNgn.toLocaleString()} each month.`)
                       : (confirm.cycle === 'yearly'
-                          ? `Billed once for the year — $${confirm.perMonthUsd.toLocaleString()}/mo × 12.`
-                          : `Billed monthly — $${confirm.perMonthUsd.toLocaleString()} each month.`)}
+                          ? `Billed once for the year — $${confirm.perMonthUsd.toLocaleString()}/mo × 12, charged in naira; your card converts automatically.`
+                          : `Billed monthly — $${confirm.perMonthUsd.toLocaleString()} each month, charged in naira; your card converts automatically.`)}
                   </div>
                 </div>
 
@@ -359,10 +362,10 @@ export default function Pricing() {
                   disabled={paying}
                   className="sheen mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3 text-sm font-semibold text-white shadow-[0_0_28px_rgba(99,102,241,0.4)] disabled:opacity-60"
                 >
-                  {paying ? 'Opening secure checkout…' : `Confirm & pay ${confirm.currency === 'NGN' ? `₦${confirm.chargeNgn.toLocaleString()}` : `$${confirm.chargeUsd.toLocaleString()}`}`}
+                  {paying ? 'Opening secure checkout…' : `Confirm & pay ${confirm.currency === 'NGN' ? `₦${confirm.chargeNgn.toLocaleString()}` : `$${confirm.chargeUsd.toLocaleString()} (₦${confirm.billNgn.toLocaleString()})`}`}
                 </motion.button>
                 <div className="mt-3 flex items-center justify-center gap-1.5 text-[10.5px] text-muted">
-                  <ShieldCheck size={12} className="text-success" /> Secure checkout by Paystack · charged in {confirm.currency === 'NGN' ? 'naira (₦)' : 'US dollars ($)'}
+                  <ShieldCheck size={12} className="text-success" /> Secure checkout by Paystack · charged in naira (₦) · international cards welcome
                 </div>
                 <p className="mt-1 text-center text-[10.5px] text-muted">Your plan activates only after payment succeeds.</p>
               </motion.div>

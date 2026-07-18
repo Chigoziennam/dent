@@ -58,7 +58,7 @@ interface DentState {
   importEvents: (incoming: ShipEvent[]) => number
   completeOnboarding: (o: { displayName: string; projectName: string; projectTagline: string; startStage: 'spark' | 'building' | 'launched' }) => void
   logout: () => void
-  addEvent: (e: { title: string; category: EventCategory; source?: EventSource; description?: string }) => boolean
+  addEvent: (e: { title: string; category: EventCategory; source?: EventSource; description?: string; repo?: string; eventTime?: string }) => boolean
   togglePin: (id: string) => void
   deleteEvent: (id: string) => void
   saveDailyLog: (log: Omit<DailyLog, 'id'>) => void
@@ -341,17 +341,21 @@ export const useDent = create<DentState>()(
           const cap = entitlementsFor(s0.profile).manualEventsPerMonth
           if (get().manualEventsThisMonth() >= cap) return false
         }
-        const now = new Date()
+        // eventTime can be passed in so a batch of "these happened together"
+        // ships (commit + deploy) each get a distinct timestamp — the cloud
+        // upsert key is (user, time, title), so identical times would collide.
+        const when = e.eventTime ? new Date(e.eventTime) : new Date()
         const ev: ShipEvent = {
-          id: `ev_${now.getTime()}`,
+          id: `ev_${when.getTime()}_${Math.random().toString(36).slice(2, 6)}`,
           source,
           category: e.category,
           title: e.title,
           description: e.description,
           importance: 5,
           isPinned: false,
-          eventDate: format(now, 'yyyy-MM-dd'),
-          eventTime: now.toISOString(),
+          eventDate: format(when, 'yyyy-MM-dd'),
+          eventTime: when.toISOString(),
+          repo: e.repo,
         }
         const s = get()
         const events = [ev, ...s.events]

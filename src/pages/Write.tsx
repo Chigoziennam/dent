@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { subDays, format } from 'date-fns'
 import { Sparkles, Copy, Save, Check, ChevronDown, Wand2, Lock, Atom, ExternalLink } from 'lucide-react'
 import { useDent } from '../lib/store'
-import { generateContent, humanize, fuse, composeUrl } from '../lib/ai'
+import { generateContent, humanize, fuse, composeUrl, tighten, toThread, statsLine } from '../lib/ai'
 import { repoOf } from '../lib/github'
 import { entitlementsFor, platformAllowed } from '../lib/plan'
 import { TONE_META, type ContentPlatform, type Tone } from '../lib/types'
@@ -386,13 +386,29 @@ export default function Write() {
             )}
           </AnimatePresence>
 
+          {/* Reshape tools — shape the draft without spending a generation */}
+          <AnimatePresence>
+            {body.trim() && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="mt-4 flex flex-wrap items-center gap-1.5 overflow-hidden"
+              >
+                <span className="mr-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">Reshape</span>
+                <Reshape onClick={() => setBody(tighten(body))}>Tighten</Reshape>
+                {platform === 'twitter' && <Reshape onClick={() => setBody(toThread(body))}>As a thread</Reshape>}
+                <Reshape onClick={() => setBody(b => `${b.trim()}\n\n${statsLine(activeEvents)}`)}>+ Stats line</Reshape>
+                <span className="ml-1 hidden text-[10px] italic text-muted sm:inline">free · no AI credit used</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <textarea
             value={body}
             onChange={e => setBody(e.target.value)}
             placeholder={mode === 'manual'
               ? 'Your humanized post lands here — reads like you typed it yourself, because the facts are yours.'
               : `Your ${platform} post appears here. Generated from real events — then it's yours to edit.`}
-            className="mt-4 min-h-[320px] flex-1 resize-none rounded-xl border border-line bg-white/[0.02] p-4 font-sans text-sm leading-relaxed placeholder:text-muted"
+            className="mt-3 min-h-[320px] flex-1 resize-none rounded-xl border border-line bg-white/[0.02] p-4 font-sans text-sm leading-relaxed placeholder:text-muted"
           />
           <div className="mt-3 flex items-center justify-between">
             <span className="font-mono text-[11px] text-muted">{body.length} chars{platform === 'twitter' && body.length > 280 ? ' · thread territory' : ''}</span>
@@ -422,5 +438,18 @@ export default function Write() {
         </div>
       </div>
     </Page>
+  )
+}
+
+// A local reshape chip — instant text transform, no AI call.
+function Reshape({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.95 }}
+      onClick={onClick}
+      className="rounded-full border border-line px-3 py-1 text-[11.5px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent"
+    >
+      {children}
+    </motion.button>
   )
 }

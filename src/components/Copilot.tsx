@@ -24,6 +24,14 @@ export function Copilot() {
     return () => clearInterval(t)
   }, [])
 
+  // Any surface can summon the co-pilot — the mobile top-bar menu, a CTA —
+  // by dispatching `copilot:open`. One brain, reachable from everywhere.
+  useEffect(() => {
+    const open = () => setOpen(true)
+    window.addEventListener('copilot:open', open)
+    return () => window.removeEventListener('copilot:open', open)
+  }, [])
+
   // AUTOMATED: the co-pilot speaks first. On first open it reads the log
   // and delivers a briefing — no question needed. Runs once per session.
   const briefed = useRef(false)

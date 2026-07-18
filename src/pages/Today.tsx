@@ -2,13 +2,14 @@ import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { format, subDays } from 'date-fns'
-import { Plus, Sparkles, PenLine, Search, CalendarRange, Flame, Hammer, SlidersHorizontal, Zap } from 'lucide-react'
+import { Plus, Sparkles, PenLine, Search, CalendarRange, Flame, Hammer, SlidersHorizontal, Zap, Check } from 'lucide-react'
 import { useDent, todayStr } from '../lib/store'
 import { SOURCE_LABEL, CATEGORY_META, levelForXP, type Mood, type EventCategory } from '../lib/types'
 import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill, AICore } from '../components/ui'
 import { AddEventModal } from '../components/AddEventModal'
 import { Mascot } from '../components/Mascot'
 import { repoOf } from '../lib/github'
+import { entitlementsFor } from '../lib/plan'
 
 // Builder moods — words first, not emoji soup
 const MOODS: { key: Mood; label: string; emoji: string }[] = [
@@ -83,6 +84,18 @@ export default function Today() {
 
   const today = todayStr()
   const todaysEvents = useMemo(() => events.filter(e => e.eventDate === today), [events, today])
+  // Ships logged together (same title, same minute) collapse into one line
+  // wearing all their tags — the "commit + deploy, one moment" view.
+  const todaysGroups = useMemo(() => {
+    const map = new Map<string, { key: string; title: string; cats: EventCategory[]; source: string; time: string }>()
+    for (const e of todaysEvents) {
+      const key = `${e.title}__${e.eventTime.slice(0, 16)}`
+      const g = map.get(key)
+      if (g) { if (!g.cats.includes(e.category)) g.cats.push(e.category) }
+      else map.set(key, { key, title: e.title, cats: [e.category], source: e.source, time: e.eventTime })
+    }
+    return [...map.values()].sort((a, b) => b.time.localeCompare(a.time))
+  }, [todaysEvents])
   const existingLog = dailyLogs.find(l => l.logDate === today)
   const level = levelForXP(profile.builderScore)
   const hour = new Date().getHours()
@@ -90,9 +103,21 @@ export default function Today() {
   const xpToday = todaysEvents.length * 10 + (existingLog ? 25 : 0)
   const prompts = PROMPTS[new Date().getDate() % PROMPTS.length]
 
-  // Inline composer — the fastest path from "did a thing" to "logged"
+  // Inline composer — the fastest path from "did a thing" to "logged".
+  // Categories are MULTI-select: one moment can be a commit AND a deploy, so
+  // "wrote it and shipped it" logs as a linked group the writer tells as one arc.
   const [quickTitle, setQuickTitle] = useState('')
-  const [quickCat, setQuickCat] = useState<EventCategory>('commit')
+  const [quickCats, setQuickCats] = useState<Set<EventCategory>>(new Set(['commit']))
+  const [quickRepo, setQuickRepo] = useState<string | null>(null)
+  const toggleCat = (c: EventCategory) => {
+    setQuickCats(prev => {
+      const next = new Set(prev)
+      if (next.has(c)) { if (next.size > 1) next.delete(c) } // keep at least one
+      else next.add(c)
+      return next
+    })
+    if (DETAIL_CATS.includes(c)) setDetailsOpen(true)
+  }
   // Open by default — the note/proof/effort fields ARE the log's memory,
   // and the AI answers are only as detailed as what lands here.
   const [detailsOpen, setDetailsOpen] = useState(true)
@@ -102,17 +127,41 @@ export default function Today() {
   const [shipKind, setShipKind] = useState<string | null>(null)
   const [cheer, setCheer] = useState<string | null>(null)
 
+  // Repos the builder actually has (from GitHub sync) — tap one to attach the
+  // log to that project so the writer can talk about it by name.
+  const knownRepos = useMemo(
+    () => [...new Set(events.map(repoOf).filter((r): r is string => !!r))].slice(0, 6),
+    [events],
+  )
+
+  // How many manual logs are left this month — so a multi-category ship never
+  // logs half its parts and then hits the Free cap mid-way.
+  const manualCap = entitlementsFor(profile).manualEventsPerMonth
+  const manualUsed = useDent(s => s.manualEventsThisMonth())
+  const manualLeft = manualCap - manualUsed
+
   const [capHit, setCapHit] = useState(false)
   const quickShip = () => {
     if (!quickTitle.trim()) return
+    const cats = [...quickCats]
+    // Guard the whole group up front: all parts land, or none do.
+    if (Number.isFinite(manualLeft) && cats.length > manualLeft) { setCapHit(true); return }
     const parts: string[] = []
     if (note.trim()) parts.push(note.trim())
     if (shipKind) parts.push(`Belongs to: ${shipKind}`)
     if (effort) parts.push(`Effort: ${effort}`)
     if (link.trim()) parts.push(`Link: ${link.trim()}`)
-    const ok = addEvent({ title: quickTitle.trim(), category: quickCat, description: parts.join('\n') || undefined })
+    const desc = parts.join('\n') || undefined
+    // Log one linked ship per chosen category, each a millisecond apart so the
+    // cloud keeps them all; same title + same day makes them one story.
+    const base = Date.now()
+    let ok = true
+    cats.forEach((c, i) => {
+      const done = addEvent({ title: quickTitle.trim(), category: c, description: desc, repo: quickRepo ?? undefined, eventTime: new Date(base + i).toISOString() })
+      if (!done) ok = false
+    })
     if (!ok) { setCapHit(true); return }
-    setQuickTitle(''); setNote(''); setLink(''); setEffort(null); setShipKind(null)
+    setQuickTitle(''); setNote(''); setLink(''); setEffort(null); setShipKind(null); setQuickRepo(null)
     setCheer(SHIP_CHEERS[Math.floor(Math.random() * SHIP_CHEERS.length)])
     setTimeout(() => setCheer(null), 2200)
   }
@@ -346,17 +395,37 @@ export default function Today() {
             <SectionTitle>Today's Log</SectionTitle>
             <span className="font-mono text-xs text-muted">{todaysEvents.length} ships · +{xpToday} XP</span>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {QUICK_CATS.map(c => (
-              <button key={c} onClick={() => { setQuickCat(c); if (DETAIL_CATS.includes(c)) setDetailsOpen(true) }}
-                className="rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all"
-                style={quickCat === c
-                  ? { color: CATEGORY_META[c].color, background: CATEGORY_META[c].bg, borderColor: CATEGORY_META[c].color }
-                  : { color: 'var(--ink-2)', borderColor: 'var(--edge)' }}>
-                {CATEGORY_META[c].label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {QUICK_CATS.map(c => {
+              const on = quickCats.has(c)
+              return (
+                <button key={c} onClick={() => toggleCat(c)}
+                  className="flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all"
+                  style={on
+                    ? { color: CATEGORY_META[c].color, background: CATEGORY_META[c].bg, borderColor: CATEGORY_META[c].color }
+                    : { color: 'var(--ink-2)', borderColor: 'var(--edge)' }}>
+                  {on && <Check size={11} />}{CATEGORY_META[c].label}
+                </button>
+              )
+            })}
+            {quickCats.size > 1 && (
+              <span className="ml-0.5 font-mono text-[10px] text-accent">{quickCats.size} together · one arc</span>
+            )}
           </div>
+          {/* Attach to a repo you've synced — the writer talks about it by name */}
+          {knownRepos.length > 0 && (
+            <div className="no-scrollbar mt-2 flex items-center gap-1.5 overflow-x-auto">
+              <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted">Repo</span>
+              {knownRepos.map(r => (
+                <button
+                  key={r} type="button" onClick={() => setQuickRepo(quickRepo === r ? null : r)}
+                  className={`shrink-0 rounded-full border px-2.5 py-1 font-mono text-[11px] transition-colors ${quickRepo === r ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          )}
           {/* Ongoing work — one tap continues the story */}
           {ongoing.length > 0 && (
             <div className="no-scrollbar mt-2.5 flex gap-1.5 overflow-x-auto">
@@ -364,7 +433,7 @@ export default function Today() {
                 <button
                   key={o.title}
                   type="button"
-                  onClick={() => { setQuickTitle(`${o.title} — day ${o.days.size + 1}`); setQuickCat(o.category) }}
+                  onClick={() => { setQuickTitle(`${o.title} — day ${o.days.size + 1}`); setQuickCats(new Set([o.category])) }}
                   className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-white/[0.02] px-3 py-1.5 text-[11px] text-secondary transition-colors hover:border-accent/50 hover:text-primary"
                 >
                   <span className="font-mono font-bold" style={{ color: CATEGORY_META[o.category].color }}>d{o.days.size + 1}</span>
@@ -379,7 +448,7 @@ export default function Today() {
               value={quickTitle}
               onChange={e => setQuickTitle(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); quickShip() } }}
-              placeholder={CAT_PROMPTS[quickCat] ?? 'What did you just ship?'}
+              placeholder={CAT_PROMPTS[[...quickCats][0]] ?? 'What did you just ship?'}
               className="min-w-0 flex-1 rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted"
             />
             <motion.button
@@ -439,7 +508,7 @@ export default function Today() {
                     value={note}
                     onChange={e => setNote(e.target.value)}
                     rows={2}
-                    placeholder={DETAIL_CATS.includes(quickCat)
+                    placeholder={[...quickCats].some(c => DETAIL_CATS.includes(c))
                       ? 'The details the AI will quote back — amount, who paid, which plan, how it felt.'
                       : 'The story behind it — what changed, why it matters (optional)'}
                     className="w-full resize-none rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted"
@@ -493,21 +562,23 @@ export default function Today() {
             {todaysEvents.length === 0 && (
               <p className="py-2 text-sm text-muted">Nothing logged yet. Push something — the log remembers everything.</p>
             )}
-            {todaysEvents.slice(0, 10).map((e, i) => (
+            {todaysGroups.slice(0, 10).map((g, i) => (
               <motion.div
-                key={e.id}
+                key={g.key}
                 variants={{ initial: { opacity: 0, x: -12 }, animate: { opacity: 1, x: 0 } }}
                 className="flex items-center gap-3"
               >
                 <Checkmark delay={i * 0.07} />
-                <span className="min-w-0 flex-1 truncate text-sm text-primary">{e.title}</span>
-                <CategoryPill category={e.category} />
-                <span className="hidden font-mono text-[10px] text-muted sm:block">{SOURCE_LABEL[e.source]}</span>
+                <span className="min-w-0 flex-1 truncate text-sm text-primary">{g.title}</span>
+                <div className="flex shrink-0 items-center gap-1">
+                  {g.cats.map(c => <CategoryPill key={c} category={c} />)}
+                </div>
+                <span className="hidden font-mono text-[10px] text-muted sm:block">{SOURCE_LABEL[g.source as keyof typeof SOURCE_LABEL]}</span>
               </motion.div>
             ))}
-            {todaysEvents.length > 10 && (
+            {todaysGroups.length > 10 && (
               <button onClick={() => navigate('/app/timeline')} className="text-xs text-accent hover:underline">
-                + {todaysEvents.length - 10} more in the timeline →
+                + {todaysGroups.length - 10} more in the timeline →
               </button>
             )}
           </motion.div>

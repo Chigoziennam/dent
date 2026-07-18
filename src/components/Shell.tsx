@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sun, Clock, PenLine, BarChart3, ScrollText, Trophy, Plug, Settings,
-  Search, ChevronsLeft, ChevronsRight, Sparkles, LayoutGrid, X, ExternalLink,
+  Search, ChevronsLeft, ChevronsRight, Sparkles, LayoutGrid, X, ExternalLink, ChevronDown,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useDent } from '../lib/store'
@@ -46,6 +46,7 @@ export default function Shell() {
   const [collapsed, setCollapsed] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [topMenu, setTopMenu] = useState(false)
   const [now, setNow] = useState(new Date())
   const profile = useDent(s => s.profile)
   const userId = useDent(s => s.userId)
@@ -152,7 +153,14 @@ export default function Shell() {
             </div>
             <h1 className="hidden text-[15px] font-semibold md:block">{pageTitle}</h1>
             <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1.5">
+              {/* The owl + clock is a tappable menu — quick reach to search, the
+                  co-pilot, settings and your public page from any screen. */}
+              <button
+                onClick={() => setTopMenu(o => !o)}
+                className="flex items-center gap-1.5 rounded-full border border-transparent px-2 py-1 transition-colors hover:border-line hover:bg-white/[0.03]"
+                aria-label="Quick menu"
+                aria-expanded={topMenu}
+              >
                 <motion.span
                   className="text-sm"
                   animate={{ y: [0, -2, 0], rotate: [0, -4, 0] }}
@@ -162,12 +170,31 @@ export default function Shell() {
                   🦉
                 </motion.span>
                 <span className="time-glow font-mono text-xs font-semibold">{format(now, 'EEE d MMM · HH:mm')}</span>
-              </span>
-              <button onClick={() => setPaletteOpen(true)} className="rounded-lg p-2 text-secondary hover:bg-white/5 md:hidden">
-                <Search size={17} />
+                <ChevronDown size={13} className={`text-muted transition-transform ${topMenu ? 'rotate-180' : ''}`} />
               </button>
             </div>
           </div>
+
+          {/* Quick-menu dropdown */}
+          <AnimatePresence>
+            {topMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setTopMenu(false)} />
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  className="glass-strong absolute right-4 top-14 z-50 w-56 overflow-hidden !rounded-2xl p-1.5 md:right-8"
+                >
+                  <TopMenuItem icon={Search} label="Search the log" hint="⌘K" onClick={() => { setTopMenu(false); setPaletteOpen(true) }} />
+                  <TopMenuItem icon={Sparkles} label="Ask the co-pilot" hint="AI" onClick={() => { setTopMenu(false); window.dispatchEvent(new Event('copilot:open')) }} />
+                  <TopMenuItem icon={Settings} label="Settings" onClick={() => { setTopMenu(false); navigate('/app/settings') }} />
+                  <TopMenuItem icon={ExternalLink} label="View public page" onClick={() => { setTopMenu(false); navigate(`/${profile.username}`) }} />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </header>
 
         <main className="flex-1 pb-24 md:pb-8">
@@ -264,6 +291,19 @@ export default function Shell() {
         {!needsOnboarding && !profile.tourDone && <Tour />}
       </AnimatePresence>
     </div>
+  )
+}
+
+function TopMenuItem({ icon: Icon, label, hint, onClick }: { icon: typeof Sun; label: string; hint?: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[13px] text-secondary transition-colors hover:bg-white/[0.06] hover:text-primary"
+    >
+      <Icon size={15} className="text-accent" />
+      <span className="flex-1 font-medium">{label}</span>
+      {hint && <kbd className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[9.5px] text-muted">{hint}</kbd>}
+    </button>
   )
 }
 

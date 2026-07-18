@@ -383,6 +383,50 @@ export async function fuse(params: {
   }
 }
 
+// ── Reshape tools — instant, local, zero AI credits ──────────
+// The draft is yours to shape without spending a generation: tighten the
+// filler, fan it into a thread, or stamp the hard numbers on it.
+const FILLER = /\b(just|really|very|actually|basically|simply|literally|honestly|kind of|sort of)\b/gi
+
+export function tighten(text: string): string {
+  return text
+    .split('\n')
+    .map(line => line
+      .replace(/\bin order to\b/gi, 'to')
+      .replace(FILLER, '')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s+([,.!?;:])/g, '$1')
+      .trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+export function toThread(text: string): string {
+  const lines = text.replace(/\n{2,}/g, '\n').split('\n').map(l => l.trim()).filter(Boolean)
+  const tweets: string[] = []
+  let cur = ''
+  for (const line of lines) {
+    if ((cur + '\n' + line).trim().length > 255) { if (cur) tweets.push(cur.trim()); cur = line }
+    else cur = cur ? `${cur}\n${line}` : line
+  }
+  if (cur) tweets.push(cur.trim())
+  const n = tweets.length
+  return tweets.map((t, i) => `${i + 1}/${n} ${t}`).join('\n\n')
+}
+
+// A hard-numbers line from a set of ships — money and customers lead.
+export function statsLine(events: ShipEvent[]): string {
+  const c = countBy(events)
+  const bits: string[] = []
+  if (c.commit) bits.push(`${c.commit} commit${c.commit > 1 ? 's' : ''}`)
+  if (c.deployment) bits.push(`${c.deployment} deploy${c.deployment > 1 ? 's' : ''}`)
+  if (c.feature) bits.push(`${c.feature} feature${c.feature > 1 ? 's' : ''}`)
+  if (c.bugfix) bits.push(`${c.bugfix} fix${c.bugfix > 1 ? 'es' : ''}`)
+  const money = moneyLine(events)
+  return `📊 ${bits.join(' · ') || `${events.length} ships`}${money ? ` · 💰 ${money}` : ''}`
+}
+
 // ── Copy & open: paste-ready posting ─────────────────────────
 // Copies the post, then opens the platform's compose surface —
 // prefilled where the platform allows it, paste-ready everywhere else.

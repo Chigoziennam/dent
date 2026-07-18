@@ -29,21 +29,42 @@ export default function Settings() {
 
   const signOut = () => { logout(); navigate('/') }
 
-  // Data ownership: one click, everything you ever logged
-  const exportData = () => {
+  // Data ownership: export the LOGS from the window you choose, always wrapped
+  // with WHO you are — name, project, achievements, level — so the file stands
+  // on its own. `days: null` means your whole history.
+  const exportData = (days: number | null) => {
     const s = useDent.getState()
-    const blob = new Blob([JSON.stringify({
+    const cutoff = days == null ? '' : new Date(Date.now() - days * 864e5).toISOString().slice(0, 10)
+    const inRange = <T extends { eventDate?: string; logDate?: string; createdAt?: string; publishedAt?: string }>(arr: T[], key: keyof T) =>
+      days == null ? arr : arr.filter(x => String(x[key] ?? '') >= cutoff)
+    const events = inRange(s.events, 'eventDate')
+    const dailyLogs = inRange(s.dailyLogs, 'logDate')
+    const label = days == null ? 'all' : days === 0 ? 'today' : `${days}d`
+    const payload = {
       exportedAt: new Date().toISOString(),
-      profile: s.profile,
-      events: s.events,
-      dailyLogs: s.dailyLogs,
-      content: s.content,
-      changelog: s.changelog,
+      range: days == null ? 'all-time' : days === 0 ? 'today' : `last-${days}-days`,
+      // WHO — always included so the logs have an owner and context.
+      you: {
+        displayName: s.profile.displayName,
+        username: s.profile.username,
+        project: s.profile.projectName,
+        tagline: s.profile.projectTagline,
+        level: Math.floor(s.profile.builderScore / 500) + 1,
+        builderScore: s.profile.builderScore,
+        streak: s.profile.streakCurrent,
+        totalShips: s.profile.totalShips,
+      },
       achievements: s.unlocked,
-    }, null, 2)], { type: 'application/json' })
+      // WHAT — scoped to the chosen window.
+      events,
+      dailyLogs,
+      content: inRange(s.content, 'createdAt'),
+      changelog: inRange(s.changelog, 'publishedAt'),
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `dent-export-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `dent-${s.profile.username}-${label}-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -201,19 +222,32 @@ export default function Settings() {
       </GlassCard>
 
       <GlassCard className="mt-4">
-        <SectionTitle>Data</SectionTitle>
-        <div className="flex flex-wrap items-center gap-3">
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={exportData}
-            className="flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-[13px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-primary"
-          >
-            <Download size={14} /> Export everything as JSON
-          </motion.button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle>Data</SectionTitle>
           <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold ${syncErr ? 'bg-red-400/15 text-red-400' : supabaseReady ? 'bg-success/15 text-success' : 'bg-white/5 text-muted'}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${syncErr ? 'bg-red-400' : supabaseReady ? 'bg-success' : 'bg-muted'}`} />
             {syncErr ? 'Cloud sync error' : supabaseReady ? 'Cloud sync on' : 'Cloud not configured'}
           </span>
+        </div>
+        {/* Pick the window — the file always carries your name, project & badges */}
+        <div className="mt-1 mb-2.5 text-[11px] font-medium text-secondary">Export the logs from</div>
+        <div className="flex flex-wrap items-center gap-2">
+          {([
+            { label: 'Today', days: 0 },
+            { label: 'Last 7 days', days: 7 },
+            { label: 'Last 30 days', days: 30 },
+            { label: 'Last 90 days', days: 90 },
+            { label: 'All time', days: null },
+          ] as const).map(r => (
+            <motion.button
+              key={r.label}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => exportData(r.days)}
+              className="flex items-center gap-1.5 rounded-xl border border-line px-3.5 py-2 text-[12.5px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-primary"
+            >
+              <Download size={13} /> {r.label}
+            </motion.button>
+          ))}
           {pending > 0 && (
             <span className="rounded-full bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-secondary">
               {pending} change{pending === 1 ? '' : 's'} waiting to sync
@@ -221,11 +255,11 @@ export default function Settings() {
           )}
         </div>
         <p className="mt-2.5 text-[11px] leading-relaxed text-muted">
-          Your log belongs to you — the export includes every event, reflection, draft and achievement.
+          Downloads a JSON of your ships, reflections, drafts and changelog from that window — always wrapped with your name, project, level and achievements, so it stands on its own.
           {syncErr
             ? ` Last cloud save failed (${syncErr}) — changes are queued and retried automatically.`
             : supabaseReady
-              ? ' Every ship, daily log and post is backed up to the cloud as you go.'
+              ? ' Everything is also backed up to the cloud as you go.'
               : ' Add your Supabase keys to .env to enable cloud sync.'}
         </p>
       </GlassCard>

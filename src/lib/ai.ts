@@ -59,8 +59,9 @@ export async function generateContent(p: GenParams): Promise<string> {
   const alive = await callN8n('generate', {
     platform: p.platform, tone: p.tone, projectName: p.projectName, projectTagline: p.projectTagline,
     // detail carries the note/proof/effort the builder typed — this is what
-    // turns "generic AI post" into receipts with real numbers.
-    events: p.events.map(e => ({ category: e.category, title: e.title, date: e.eventDate, detail: e.description?.slice(0, 240) })),
+    // turns "generic AI post" into receipts with real numbers. a.events is
+    // deduped so a commit+deploy pair is one ship, not a repeated line.
+    events: a.events.map(e => ({ category: e.category, title: e.title, date: e.eventDate, detail: e.description?.slice(0, 240) })),
     dailyLogs: p.dailyLogs.map(l => ({ date: l.logDate, built: l.whatIBuilt, learned: l.whatILearned, blocked: l.whatBlockedMe, energy: l.energyLevel })),
     // Pre-chewed analysis so the model tells ONE precise story (e.g. commit+deploy = one arc).
     analysis: { combos: a.combos, counts: a.counts, money: a.money, headline: a.headline ? cleanTitle(a.headline.title) : null, stories: a.stories },
@@ -85,7 +86,7 @@ export async function generateContent(p: GenParams): Promise<string> {
             content: `Context (project, for reference only — do NOT make it the headline): ${p.projectName} — ${p.projectTagline}
 
 The ships to write about:
-${p.events.map(e => `- [${e.category}] ${e.title} (${e.eventDate})${e.description ? ` — ${e.description.slice(0, 160).replace(/\n/g, '; ')}` : ''}`).join('\n')}
+${a.events.map(e => `- [${e.category}] ${e.title} (${e.eventDate})${e.description ? ` — ${e.description.slice(0, 160).replace(/\n/g, '; ')}` : ''}`).join('\n')}
 ${a.combos.length ? `\nWhat connects: ${a.combos.join('; ')} — tell these as ONE arc, not separate bullets.` : ''}${a.money ? `\nMoney/customer: ${a.money} — lead with this.` : ''}
 
 Daily reflections:
@@ -136,12 +137,30 @@ export interface ShipAnalysis {
   money: string | null
 }
 
+// A commit + a deploy logged "together" are two rows sharing one title and the
+// same minute. For the STORY they're one ship (told as an arc), so we collapse
+// them here — otherwise the post lists the same line two or three times.
+function dedupeShips(events: ShipEvent[]): ShipEvent[] {
+  const seen = new Set<string>()
+  const out: ShipEvent[] = []
+  for (const e of events) {
+    const k = `${e.title.trim().toLowerCase()}__${e.eventTime.slice(0, 16)}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(e)
+  }
+  return out
+}
+
 // Precise analysis of a set of ships: what got built, what connects to what,
 // and the stories worth telling. This is what lets a commit + a deploy become
 // ONE narrative instead of two dead bullets.
 export function analyzeShips(events: ShipEvent[]): ShipAnalysis {
   const counts = countBy(events)
-  const sorted = [...events].sort((a, b) => b.importance - a.importance || b.eventTime.localeCompare(a.eventTime))
+  // Bullets/stories/headline read from the DEDUPED set (no repeated lines);
+  // counts and combos below still see every row, so "commit + deploy" is real.
+  const unique = dedupeShips(events)
+  const sorted = [...unique].sort((a, b) => b.importance - a.importance || b.eventTime.localeCompare(a.eventTime))
   const headline = sorted[0] ?? null
   const stories = sorted
     .map(e => { const s = extractStory(e); return s ? { title: cleanTitle(e.title), story: s, category: e.category } : null })
@@ -163,7 +182,7 @@ export function analyzeShips(events: ShipEvent[]): ShipAnalysis {
   }
 
   return {
-    events,
+    events: unique, // deduped — bullet lists never repeat a ship
     counts,
     headline,
     stories,

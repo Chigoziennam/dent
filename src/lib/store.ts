@@ -48,7 +48,7 @@ interface DentState {
   // True while the store still holds the showcase seed data
   seeded: boolean
   // Integration credentials — stored locally on this device only
-  creds: { githubToken?: string; githubUser?: string; githubLastSync?: string; supabaseUrl?: string; supabaseAnon?: string; paystackPublicKey?: string }
+  creds: { githubToken?: string; githubUser?: string; githubLastSync?: string; githubRepos?: string[]; supabaseUrl?: string; supabaseAnon?: string; paystackPublicKey?: string }
   aiUsed: number // AI generations used, lifetime (display)
   aiWeek: string // Monday-anchored week key the count below belongs to
   aiWeekCount: number // AI generations used this week (free-tier gate)

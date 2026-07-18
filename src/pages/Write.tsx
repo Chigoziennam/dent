@@ -396,7 +396,7 @@ export default function Write() {
                 <span className="mr-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">Reshape</span>
                 <Reshape onClick={() => setBody(tighten(body))}>Tighten</Reshape>
                 {platform === 'twitter' && <Reshape onClick={() => setBody(toThread(body))}>As a thread</Reshape>}
-                <Reshape onClick={() => setBody(b => `${b.trim()}\n\n${statsLine(activeEvents)}`)}>+ Stats line</Reshape>
+                <Reshape onClick={() => setBody(b => `${b.replace(/\n*📊[^\n]*/g, '').trim()}\n\n${statsLine(activeEvents)}`)}>+ Stats line</Reshape>
                 <span className="ml-1 hidden text-[10px] italic text-muted sm:inline">free · no AI credit used</span>
               </motion.div>
             )}

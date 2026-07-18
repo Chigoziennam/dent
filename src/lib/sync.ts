@@ -234,6 +234,30 @@ export function pushProfile(userId: string, p: ProfileSync) {
   })
 }
 
+// ── Screenshot proof → Supabase Storage, stored as a URL ──
+// The image bytes live in the `proofs` bucket; the log only keeps the public
+// URL, so a screenshot costs a few bytes in the row instead of megabytes.
+// Path is namespaced by user id so the RLS policy can enforce ownership.
+export async function uploadProof(userId: string, file: File): Promise<string | null> {
+  if (!supabase) return null
+  if (!file.type.startsWith('image/')) { lastSyncError = 'Only image files can be attached'; return null }
+  if (file.size > 6 * 1024 * 1024) { lastSyncError = 'Screenshot is over 6MB — shrink it and retry'; return null }
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png'
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const { error } = await supabase.storage.from('proofs').upload(path, file, {
+    cacheControl: '3600', upsert: false, contentType: file.type || undefined,
+  })
+  if (error) {
+    // Most likely the bucket/policy from upgrade-5 SQL isn't in place yet.
+    lastSyncError = /bucket|not found/i.test(error.message)
+      ? 'Screenshot storage not set up — run supabase/upgrade-5-proofs-storage.sql'
+      : error.message
+    console.error('[sync] proof upload failed:', error.message)
+    return null
+  }
+  return supabase.storage.from('proofs').getPublicUrl(path).data.publicUrl ?? null
+}
+
 export function pushEvent(userId: string, e: ShipEvent) {
   // Upsert on (user_id, event_time, title) — a double login can never
   // duplicate a ship again (needs the unique index from upgrade-3 SQL).

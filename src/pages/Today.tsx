@@ -9,7 +9,9 @@ import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill, AICore }
 import { AddEventModal } from '../components/AddEventModal'
 import { Mascot } from '../components/Mascot'
 import { repoOf } from '../lib/github'
+import { uploadProof, syncHealth } from '../lib/sync'
 import { entitlementsFor } from '../lib/plan'
+import { ImagePlus, Loader2 } from 'lucide-react'
 
 // Builder moods — words first, not emoji soup
 const MOODS: { key: Mood; label: string; emoji: string }[] = [
@@ -76,7 +78,8 @@ const EFFORT = [
 ]
 
 export default function Today() {
-  const { profile, events, dailyLogs, saveDailyLog, addEvent } = useDent()
+  const { profile, events, dailyLogs, saveDailyLog, addEvent, creds } = useDent()
+  const userId = useDent(s => s.userId)
   const [params, setParams] = useSearchParams()
   const [addOpen, setAddOpen] = useState(params.get('add') === '1')
   const [xpFloat, setXpFloat] = useState(false)
@@ -126,12 +129,26 @@ export default function Today() {
   const [effort, setEffort] = useState<string | null>(null)
   const [shipKind, setShipKind] = useState<string | null>(null)
   const [cheer, setCheer] = useState<string | null>(null)
+  // Screenshot proof — uploaded to Supabase Storage, the log keeps only the URL.
+  const [shotUrl, setShotUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [shotErr, setShotErr] = useState<string | null>(null)
+  const onPickShot = async (file?: File) => {
+    if (!file) return
+    if (!userId) { setShotErr('Sign in to attach screenshots — they save to your cloud.'); return }
+    setShotErr(null); setUploading(true)
+    const url = await uploadProof(userId, file)
+    setUploading(false)
+    if (url) { setShotUrl(url); setDetailsOpen(true) }
+    else setShotErr(syncHealth().error ?? 'Upload failed — try again.')
+  }
 
-  // Repos the builder actually has (from GitHub sync) — tap one to attach the
-  // log to that project so the writer can talk about it by name.
+  // Repos the builder can attach a log to — the ones from their connected
+  // GitHub account PLUS any that already appear on synced ships. Tapping one
+  // ties the log to that project so the writer can talk about it by name.
   const knownRepos = useMemo(
-    () => [...new Set(events.map(repoOf).filter((r): r is string => !!r))].slice(0, 6),
-    [events],
+    () => [...new Set([...(creds.githubRepos ?? []), ...events.map(repoOf).filter((r): r is string => !!r)])].slice(0, 8),
+    [events, creds.githubRepos],
   )
 
   // How many manual logs are left this month — so a multi-category ship never
@@ -151,6 +168,7 @@ export default function Today() {
     if (shipKind) parts.push(`Belongs to: ${shipKind}`)
     if (effort) parts.push(`Effort: ${effort}`)
     if (link.trim()) parts.push(`Link: ${link.trim()}`)
+    if (shotUrl) parts.push(`Shot: ${shotUrl}`)
     const desc = parts.join('\n') || undefined
     // Log one linked ship per chosen category, each a millisecond apart so the
     // cloud keeps them all; same title + same day makes them one story.
@@ -162,6 +180,7 @@ export default function Today() {
     })
     if (!ok) { setCapHit(true); return }
     setQuickTitle(''); setNote(''); setLink(''); setEffort(null); setShipKind(null); setQuickRepo(null)
+    setShotUrl(null); setShotErr(null)
     setCheer(SHIP_CHEERS[Math.floor(Math.random() * SHIP_CHEERS.length)])
     setTimeout(() => setCheer(null), 2200)
   }
@@ -387,14 +406,18 @@ export default function Today() {
         )}
       </AnimatePresence>
 
-      {/* ── TODAY'S LOG — one system: ship it, see it, close the day ── */}
+      {/* ── TODAY'S JOURNAL — one page: ship it, see it, close the day ── */}
       <GlassCard className="mt-4 !p-0 overflow-hidden">
         {/* Composer */}
         <div className="border-b border-line p-5">
           <div className="flex items-center justify-between">
-            <SectionTitle>Today's Log</SectionTitle>
+            <SectionTitle>Today's Journal</SectionTitle>
             <span className="font-mono text-xs text-muted">{todaysEvents.length} ships · +{xpToday} XP</span>
           </div>
+          <p className="-mt-1 mb-2.5 text-[11.5px] leading-relaxed text-muted">
+            Log each ship, then close out the day below — it's all one page. Did two things at once?
+            <span className="text-secondary"> Tap more than one tag</span> — a commit + a deploy save as one story.
+          </p>
           <div className="flex flex-wrap items-center gap-1.5">
             {QUICK_CATS.map(c => {
               const on = quickCats.has(c)
@@ -516,9 +539,25 @@ export default function Today() {
                   <input
                     value={link}
                     onChange={e => setLink(e.target.value)}
-                    placeholder="Proof link — PR, deploy URL, screenshot (optional)"
+                    placeholder="Proof link — PR, deploy URL (optional)"
                     className="w-full rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 font-mono text-xs placeholder:text-muted"
                   />
+                  {/* Screenshot proof — the image goes to Storage, the log keeps the URL */}
+                  {shotUrl ? (
+                    <div className="flex items-center gap-3 rounded-xl border border-accent/40 bg-accent/[0.05] p-2">
+                      <img src={shotUrl} alt="proof" className="h-12 w-12 rounded-lg object-cover" />
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-secondary">Screenshot attached — saved to your cloud ✓</span>
+                      <button type="button" onClick={() => setShotUrl(null)} className="shrink-0 rounded-lg px-2 py-1 text-[11px] text-muted hover:text-secondary">Remove</button>
+                    </div>
+                  ) : (
+                    <label className={`flex cursor-pointer items-center gap-2.5 rounded-xl border border-dashed px-3.5 py-2.5 text-xs transition-colors ${uploading ? 'border-accent/50 text-accent' : 'border-line text-muted hover:border-accent/50 hover:text-secondary'}`}>
+                      {uploading ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
+                      <span>{uploading ? 'Uploading screenshot…' : 'Drop a screenshot — proof of the demo, payout or green deploy'}</span>
+                      <input type="file" accept="image/*" className="hidden" disabled={uploading}
+                        onChange={e => { onPickShot(e.target.files?.[0]); e.currentTarget.value = '' }} />
+                    </label>
+                  )}
+                  {shotErr && <p className="text-[11px] text-warning">{shotErr}</p>}
                   <div className="flex gap-1.5">
                     {EFFORT.map(ef => (
                       <button

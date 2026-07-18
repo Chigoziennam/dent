@@ -6,7 +6,7 @@ import { useDent } from '../lib/store'
 import { CATEGORY_META } from '../lib/types'
 import { supabaseReady } from '../lib/supabase'
 import { checkCloudHealth, syncHealth } from '../lib/sync'
-import { verifyGithub, fetchGithubShips, type GithubAccount } from '../lib/github'
+import { verifyGithub, fetchGithubShips, fetchGithubRepos, type GithubAccount } from '../lib/github'
 import { Page, SectionTitle } from '../components/ui'
 
 const PIPELINE = [
@@ -42,7 +42,15 @@ export default function Integrations() {
   useEffect(() => {
     if (!creds.githubUser) return
     verifyGithub({ user: creds.githubUser, token: creds.githubToken })
-      .then(setAccount)
+      .then(acc => {
+        setAccount(acc)
+        // Backfill the repo list for accounts connected before this existed.
+        if (!creds.githubRepos?.length) {
+          fetchGithubRepos({ user: creds.githubUser!, token: creds.githubToken }, 12)
+            .then(repos => setCreds({ githubRepos: repos.map(r => r.name) }))
+            .catch(() => { /* nicety only */ })
+        }
+      })
       .catch(() => setAccount(null))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -55,6 +63,11 @@ export default function Integrations() {
       setAccount(acc)
       setCreds({ githubUser: ghUser.trim(), githubToken: ghToken.trim() || undefined })
       notify(`Connected as @${acc.login} — ${acc.public_repos} public repos. Now hit Sync. ✓`)
+      // Grab the repo names so the Today composer can offer them straight away,
+      // even before the first commit sync. Best-effort — never blocks connect.
+      fetchGithubRepos({ user: ghUser.trim(), token: ghToken.trim() || undefined }, 12)
+        .then(repos => setCreds({ githubRepos: repos.map(r => r.name) }))
+        .catch(() => { /* repo list is a nicety, not required */ })
       // Pull straight away so "connected" means something instantly.
       await runSync(ghUser.trim(), ghToken.trim() || undefined)
     } catch (e) {

@@ -9,6 +9,16 @@ import { CATEGORY_META } from './types'
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined
 const N8N_BASE = (import.meta.env.VITE_N8N_WEBHOOK_BASE as string | undefined)?.replace(/\/$/, '')
 
+// Who n8n should read from Supabase. Set on login (and cleared on logout) by
+// the store — without it n8n can only use the events we post in the body,
+// which is whatever this browser happens to have cached.
+let aiUserId: string | null = null
+export function setAiIdentity(userId: string | null) { aiUserId = userId }
+
+// How far back the writer should look. 'auto' lets n8n decide from the task
+// (a single post = that day's ships; a weekly recap = 7 days).
+export type AiRange = 'auto' | 'today' | 'week' | 'month'
+
 // Alive mode: route through your own n8n instance, which holds the real
 // Anthropic key server-side and can log usage. One webhook, every feature.
 async function callN8n(task: string, payload: Record<string, unknown>): Promise<string | null> {
@@ -17,10 +27,14 @@ async function callN8n(task: string, payload: Record<string, unknown>): Promise<
     const res = await fetch(`${N8N_BASE}/shiplog-ai`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task, ...payload }),
+      // userId lets n8n pull the authoritative rows from Supabase; the events
+      // we also post stay as the fallback for signed-out demo users.
+      body: JSON.stringify({ task, userId: aiUserId, ...payload }),
       // n8n can hang forever if the workflow isn't active — never let the UI
-      // wait on it. 12s is enough for a real Claude answer through n8n.
-      signal: AbortSignal.timeout(12_000),
+      // wait on it. Long formats (devto, changelog, newsletter) measured 8-9s
+      // through n8n, so 12s left almost no margin and silently dropped real
+      // answers into the local-template fallback. 25s covers the slow tail.
+      signal: AbortSignal.timeout(25_000),
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -52,12 +66,16 @@ interface GenParams {
   tone: Tone
   projectName: string
   projectTagline: string
+  // How far back to pull. Omit and n8n infers it from the platform:
+  // a tweet is about today's ships, a newsletter/changelog covers the week.
+  range?: AiRange
 }
 
 export async function generateContent(p: GenParams): Promise<string> {
   const a = analyzeShips(p.events)
   const alive = await callN8n('generate', {
     platform: p.platform, tone: p.tone, projectName: p.projectName, projectTagline: p.projectTagline,
+    range: p.range ?? 'auto',
     // detail carries the note/proof/effort the builder typed — this is what
     // turns "generic AI post" into receipts with real numbers. a.events is
     // deduped so a commit+deploy pair is one ship, not a repeated line.

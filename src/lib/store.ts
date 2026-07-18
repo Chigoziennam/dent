@@ -13,6 +13,7 @@ import type {
   EventCategory, EventSource, Mood, Tone,
 } from './types'
 import { ACHIEVEMENTS } from './achievements'
+import { setAiIdentity } from './ai'
 import { entitlementsFor, weekKey, monthKey } from './plan'
 
 // Which user this tab has already merged cloud data for — realLogin fires
@@ -186,6 +187,8 @@ export const useDent = create<DentState>()(
       // "forgetting" people every time they sign out and back in.
       realLogin: async (user) => {
         const s = get()
+        // Tell the AI layer whose rows n8n should read from Supabase.
+        setAiIdentity(user.id)
         // getSession() AND onAuthStateChange both fire realLogin on every page
         // load. Running the cloud merge twice in parallel raced its own dedup
         // check and duplicated every backfilled ship. Hydrate once per user.
@@ -330,6 +333,7 @@ export const useDent = create<DentState>()(
       // wipe via the switchingOwner check in realLogin.
       logout: () => {
         supabase?.auth.signOut()
+        setAiIdentity(null)
         set({ loggedIn: false })
       },
 

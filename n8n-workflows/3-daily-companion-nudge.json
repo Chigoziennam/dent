@@ -1,56 +1,97 @@
 {
-  "name": "ShipLog — Daily Companion Nudge (8pm)",
+  "name": "ShipLog \u2014 Daily Companion Nudge (8pm)",
   "nodes": [
     {
       "id": "cron1",
       "name": "Every day 20:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [0, 0],
-      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 20 * * *" }] } }
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 20 * * *"
+            }
+          ]
+        }
+      }
     },
     {
       "id": "pg1",
       "name": "Fetch recent ships per user",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [220, 0],
+      "position": [
+        220,
+        0
+      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT p.id AS user_id, p.display_name, p.streak_current,\n  (SELECT json_agg(json_build_object('title', e.title, 'category', e.category, 'date', e.event_date))\n   FROM (SELECT * FROM ship_events se WHERE se.user_id = p.id AND se.event_date >= current_date - 7 ORDER BY se.event_time DESC LIMIT 12) e) AS recent\nFROM profiles p;"
       },
-      "credentials": { "postgres": { "name": "ShipLog Postgres" } }
+      "credentials": {
+        "postgres": {
+          "name": "ShipLog Postgres"
+        }
+      }
     },
     {
       "id": "code1",
       "name": "Build nudge prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 0],
+      "position": [
+        440,
+        0
+      ],
       "parameters": {
         "jsCode": "return $input.all().map(({ json: u }) => ({ json: {\n  user_id: u.user_id,\n  system: 'You are a builder\\'s companion. ONE warm, specific sentence (max two) about their recent shipping. Reference a real event. Never generic, never naggy, no emojis spam.',\n  user: `Builder: ${u.display_name}. Streak: ${u.streak_current} days. Recent ships: ${JSON.stringify(u.recent ?? [])}. Write today's single nudge.`\n}}));"
       }
     },
     {
       "id": "http1",
-      "name": "Claude API",
+      "name": "OpenRouter AI",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 0],
+      "position": [
+        660,
+        0
+      ],
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.OPENROUTER_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://dent-tau-three.vercel.app"
+            },
+            {
+              "name": "X-Title",
+              "value": "Super Dent X"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 160, system: $json.system, messages: [{ role: 'user', content: $json.user }] }) }}"
+        "jsonBody": "={{ JSON.stringify({ model: 'anthropic/claude-haiku-4.5', max_tokens: 160, messages: [{ role: 'system', content: $json.system }, { role: 'user', content: $json.user }] }) }}",
+        "options": {
+          "timeout": 60000
+        }
       }
     },
     {
@@ -58,20 +99,69 @@
       "name": "Store nudge",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [880, 0],
+      "position": [
+        880,
+        0
+      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "INSERT INTO nudges (user_id, body, created_at) VALUES ($1::uuid, $2, now());",
-        "options": { "queryReplacement": "={{ [$('Build nudge prompt').item.json.user_id, $json.content[0].text] }}" }
+        "options": {
+          "queryReplacement": "={{ [$('Build nudge prompt').item.json.user_id, $json.choices[0].message.content] }}"
+        }
       },
-      "credentials": { "postgres": { "name": "ShipLog Postgres" } }
+      "credentials": {
+        "postgres": {
+          "name": "ShipLog Postgres"
+        }
+      }
     }
   ],
   "connections": {
-    "Every day 20:00": { "main": [[{ "node": "Fetch recent ships per user", "type": "main", "index": 0 }]] },
-    "Fetch recent ships per user": { "main": [[{ "node": "Build nudge prompt", "type": "main", "index": 0 }]] },
-    "Build nudge prompt": { "main": [[{ "node": "Claude API", "type": "main", "index": 0 }]] },
-    "Claude API": { "main": [[{ "node": "Store nudge", "type": "main", "index": 0 }]] }
+    "Every day 20:00": {
+      "main": [
+        [
+          {
+            "node": "Fetch recent ships per user",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch recent ships per user": {
+      "main": [
+        [
+          {
+            "node": "Build nudge prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build nudge prompt": {
+      "main": [
+        [
+          {
+            "node": "OpenRouter AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter AI": {
+      "main": [
+        [
+          {
+            "node": "Store nudge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {}
 }

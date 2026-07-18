@@ -20,6 +20,20 @@ import { entitlementsFor, weekKey, monthKey } from './plan'
 // heavy merge/backfill must only ever run once per user per tab.
 let hydratedFor: string | null = null
 
+// One place that pushes the WHOLE of "me" — identity, look, voice and progress
+// (score, streak, achievements, AI credits) — to the cloud in a single row, so
+// every browser sees the same you. Called after anything that moves progress.
+function syncMe(userId: string, s: DentState) {
+  pushProfile(userId, {
+    ...s.profile,
+    email: s.profile.email,
+    unlocked: s.unlocked,
+    aiWeek: s.aiWeek,
+    aiWeekCount: s.aiWeekCount,
+    aiUsed: s.aiUsed,
+  })
+}
+
 interface DentState {
   profile: Profile
   events: ShipEvent[]
@@ -212,77 +226,93 @@ export const useDent = create<DentState>()(
             },
           })
         }
-        if (alreadyHydrated) return
-        // Mirror down whatever the cloud already knows and MERGE it with local —
-        // union by id / date, so nothing on either side is lost. Then push the
-        // other direction: anything this device has that the cloud is missing
-        // goes UP, so the account is whole no matter where you sign in next.
+        if (alreadyHydrated) { flushSyncQueue(); return }
+        // Mirror down whatever the cloud knows and MERGE it with local — ships,
+        // logs, identity, look, AND progress (score, streak, achievements, AI
+        // credits). Union everywhere so neither side loses. THEN push the other
+        // direction, so the account is whole no matter where you sign in next.
         try {
           const [cp, data] = await Promise.all([fetchCloudProfile(user.id), fetchCloudData(user.id)])
-          if (data && (data.events.length > 0 || data.dailyLogs.length > 0)) {
-            set(st => {
-              const events = mergeEvents(st.events, data.events)
-              const dailyLogs = mergeLogs(st.dailyLogs, data.dailyLogs)
-              const streak = computeStreak(events, dailyLogs)
-              return {
-                events,
-                dailyLogs,
-                profile: {
-                  ...st.profile,
-                  streakCurrent: streak.current,
-                  streakLongest: streak.longest,
-                  totalShips: events.length,
-                  builderScore: Math.max(st.profile.builderScore, events.length * 10 + dailyLogs.length * 25),
-                },
+          set(st => {
+            // 1 — ships + logs: union by content, local edits win.
+            const events = data ? mergeEvents(st.events, data.events) : st.events
+            const dailyLogs = data ? mergeLogs(st.dailyLogs, data.dailyLogs) : st.dailyLogs
+            const streak = computeStreak(events, dailyLogs)
+
+            // 2 — fold the cloud profile back in. A chosen avatar/hue in the
+            // cloud beats the OAuth default; scores never regress; unlocked
+            // achievements and AI usage carry across browsers.
+            let profile = { ...st.profile }
+            let unlocked = { ...st.unlocked }
+            let aiWeek = st.aiWeek
+            let aiWeekCount = st.aiWeek === weekKey() ? st.aiWeekCount : 0
+            let aiUsed = st.aiUsed
+            if (cp) {
+              profile = {
+                ...profile,
+                username: (cp.username as string) || profile.username,
+                displayName: (cp.display_name as string) || profile.displayName,
+                bio: (cp.bio as string) ?? profile.bio,
+                projectName: (cp.current_project_name as string) || profile.projectName,
+                projectTagline: (cp.current_project_tagline as string) ?? profile.projectTagline,
+                startStage: (cp.start_stage as Profile['startStage']) ?? profile.startStage,
+                tier: (cp.tier as Profile['tier']) ?? profile.tier,
+                // The look and voice they chose — a new browser must show THEM.
+                // `||` (not `??`) so an empty saved avatar still falls back.
+                avatar: (cp.avatar as string) ?? profile.avatar,
+                avatarHue: (cp.avatar_hue as number) ?? profile.avatarHue,
+                avatarUrl: (cp.avatar_url as string) || profile.avatarUrl,
+                website: (cp.website as string) ?? profile.website,
+                twitter: (cp.twitter_handle as string) ?? profile.twitter,
+                github: (cp.github_username as string) ?? profile.github,
+                tone: (cp.default_tone as Profile['tone']) ?? profile.tone,
+                theme: (cp.theme as Profile['theme']) ?? profile.theme,
+                // A cloud profile with a project name means onboarding is done —
+                // NEVER send them through onboarding or the tour again anywhere.
+                onboarded: Boolean(cp.current_project_name) || profile.onboarded,
+                tourDone: Boolean(cp.current_project_name) || profile.tourDone,
               }
-            })
-          }
-          // Backfill UP: local ships/logs the cloud doesn't have yet — work
-          // logged while offline, or while an earlier cloud save was failing.
-          {
-            const st = get()
-            const evKey = (e: ShipEvent) => `${e.eventTime}|${e.title}`
-            const cloudEv = new Set((data?.events ?? []).map(evKey))
-            st.events.filter(e => !cloudEv.has(evKey(e))).slice(0, 300)
-              .forEach(e => pushEvent(user.id, e))
-            const cloudDl = new Set((data?.dailyLogs ?? []).map(l => l.logDate))
-            st.dailyLogs.filter(l => !cloudDl.has(l.logDate)).slice(0, 120)
-              .forEach(l => pushDailyLog(user.id, l))
-            // Re-assert the profile too — if it ever failed to save (e.g. a
-            // missing DB column), this is what finally makes the cloud whole.
-            if (st.profile.onboarded && st.profile.projectName) {
-              pushProfile(user.id, { ...st.profile, email: st.profile.email })
+              // Progress — union achievements, keep the higher scores, and
+              // trust the cloud AI count only if it's for the CURRENT week.
+              if (cp.unlocked && typeof cp.unlocked === 'object') {
+                unlocked = { ...(cp.unlocked as Record<string, string>), ...unlocked }
+              }
+              if (cp.ai_week === weekKey()) {
+                aiWeek = weekKey()
+                aiWeekCount = Math.max(aiWeekCount, (cp.ai_week_count as number) ?? 0)
+              }
+              aiUsed = Math.max(aiUsed, (cp.ai_used as number) ?? 0)
             }
-          }
-          if (cp) {
-            set(st => ({
-              profile: {
-                ...st.profile,
-                username: (cp.username as string) ?? st.profile.username,
-                displayName: (cp.display_name as string) ?? st.profile.displayName,
-                bio: (cp.bio as string) ?? st.profile.bio,
-                projectName: (cp.current_project_name as string) ?? st.profile.projectName,
-                projectTagline: (cp.current_project_tagline as string) ?? st.profile.projectTagline,
-                startStage: (cp.start_stage as Profile['startStage']) ?? st.profile.startStage,
-                tier: (cp.tier as Profile['tier']) ?? st.profile.tier,
-                // The look and voice they chose — a new browser must show THEM
-                avatar: (cp.avatar as string) ?? st.profile.avatar,
-                avatarHue: (cp.avatar_hue as number) ?? st.profile.avatarHue,
-                avatarUrl: (cp.avatar_url as string) ?? st.profile.avatarUrl,
-                website: (cp.website as string) ?? st.profile.website,
-                twitter: (cp.twitter_handle as string) ?? st.profile.twitter,
-                github: (cp.github_username as string) ?? st.profile.github,
-                tone: (cp.default_tone as Profile['tone']) ?? st.profile.tone,
-                theme: (cp.theme as Profile['theme']) ?? st.profile.theme,
-                // A cloud profile with a project name means this person already
-                // did the initial steps — NEVER send them through onboarding or
-                // the tour again, on any browser or device.
-                onboarded: Boolean(cp.current_project_name) || st.profile.onboarded,
-                tourDone: Boolean(cp.current_project_name) || st.profile.tourDone,
-              },
-            }))
-          }
-        } catch { /* offline is fine — local wins */ }
+
+            // 3 — scores reflect the merged history and never go backwards.
+            profile.streakCurrent = streak.current
+            profile.streakLongest = Math.max(streak.longest, (cp?.streak_longest as number) ?? 0, profile.streakLongest)
+            profile.totalShips = events.length
+            profile.builderScore = Math.max(
+              profile.builderScore,
+              (cp?.builder_score as number) ?? 0,
+              events.length * 10 + dailyLogs.length * 25,
+            )
+
+            // 4 — recompute achievements from the merged history so a returning
+            // builder is NEVER re-congratulated for "Hello World" on their first
+            // new log. justUnlocked stays null: no toast spam on hydration.
+            const ach = checkAchievements({ events, dailyLogs, content: st.content, profile, unlocked })
+
+            return { events, dailyLogs, profile, unlocked: ach.unlocked, justUnlocked: null, aiWeek, aiWeekCount, aiUsed }
+          })
+
+          // 5 — backfill UP using the NOW-restored state, so we never clobber
+          // the cloud with an OAuth default. Ships/logs the cloud is missing go
+          // up; the full profile + progress is re-asserted last.
+          const st = get()
+          const evKey = (e: ShipEvent) => `${e.eventTime}|${e.title}`
+          const cloudEv = new Set((data?.events ?? []).map(evKey))
+          st.events.filter(e => !cloudEv.has(evKey(e))).slice(0, 300).forEach(e => pushEvent(user.id, e))
+          const cloudDl = new Set((data?.dailyLogs ?? []).map(l => l.logDate))
+          st.dailyLogs.filter(l => !cloudDl.has(l.logDate)).slice(0, 120).forEach(l => pushDailyLog(user.id, l))
+          syncMe(user.id, st)
+        } catch { /* offline is fine — local wins, queue retries later */ }
         // Anything that failed to save while signed out goes up now.
         flushSyncQueue()
       },
@@ -290,7 +320,7 @@ export const useDent = create<DentState>()(
       completeOnboarding: (o) => {
         const s = get()
         set({ profile: { ...s.profile, ...o, onboarded: true } })
-        if (s.userId) pushProfile(s.userId, { ...o, username: s.profile.username, email: s.profile.email })
+        if (s.userId) syncMe(s.userId, get())
         track('onboarded', { stage: o.startStage })
       },
 
@@ -337,7 +367,7 @@ export const useDent = create<DentState>()(
         profile.builderScore += ach.bonusXP
         track('ship_logged', { category: ev.category })
         set({ events, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
-        if (s.userId) pushEvent(s.userId, ev)
+        if (s.userId) { pushEvent(s.userId, ev); syncMe(s.userId, get()) }
         return true
       },
 
@@ -362,7 +392,7 @@ export const useDent = create<DentState>()(
         profile.builderScore += ach.bonusXP
         track('events_imported', { count: fresh.length })
         set({ events, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
-        if (s.userId) fresh.forEach(e => pushEvent(s.userId!, e))
+        if (s.userId) { fresh.forEach(e => pushEvent(s.userId!, e)); syncMe(s.userId, get()) }
         return fresh.length
       },
 
@@ -386,7 +416,7 @@ export const useDent = create<DentState>()(
         profile.builderScore += ach.bonusXP
         track('daily_log_saved', { mood: log.mood, energy: log.energyLevel })
         set({ dailyLogs, profile, unlocked: ach.unlocked, justUnlocked: ach.newCode })
-        if (s.userId) pushDailyLog(s.userId, log)
+        if (s.userId) { pushDailyLog(s.userId, log); syncMe(s.userId, get()) }
       },
 
       saveContent: (c) => {
@@ -399,7 +429,7 @@ export const useDent = create<DentState>()(
           justUnlocked: ach.newCode,
           profile: { ...s.profile, builderScore: s.profile.builderScore + 15 + ach.bonusXP },
         })
-        if (s.userId) pushContent(s.userId, c)
+        if (s.userId) { pushContent(s.userId, c); syncMe(s.userId, get()) }
       },
 
       publishChangelog: (entry) => {
@@ -413,7 +443,7 @@ export const useDent = create<DentState>()(
       updateProfile: (p) => {
         set(s => ({ profile: { ...s.profile, ...p } }))
         const s = get()
-        if (s.userId) pushProfile(s.userId, s.profile)
+        if (s.userId) syncMe(s.userId, s)
       },
       clearUnlockToast: () => set({ justUnlocked: null }),
       setCreds: (c) => set(s => ({ creds: { ...s.creds, ...c } })),
@@ -428,6 +458,8 @@ export const useDent = create<DentState>()(
         if (used >= limit) return false
         track('ai_generated')
         set({ aiWeek: wk, aiWeekCount: used + 1, aiUsed: s.aiUsed + 1 })
+        // Persist the spend to the cloud so a new browser can't reset it.
+        if (s.userId) syncMe(s.userId, get())
         return true
       },
       aiLeftThisWeek: () => {

@@ -164,11 +164,24 @@ export async function fetchCloudData(userId: string): Promise<{ events: ShipEven
   return { events, dailyLogs }
 }
 
-export function pushProfile(userId: string, p: Partial<Profile> & { email?: string; startStage?: string }) {
+// Everything about "who you are and how far you've come" that must follow the
+// account to any browser: identity, look, voice, AND progress (score, streak,
+// unlocked achievements, weekly AI usage). All of it rides one profiles row.
+export type ProfileSync = Partial<Profile> & {
+  email?: string
+  startStage?: string
+  unlocked?: Record<string, string>
+  aiWeek?: string
+  aiWeekCount?: number
+  aiUsed?: number
+}
+
+export function pushProfile(userId: string, p: ProfileSync) {
   if (!supabase) return
-  // Core identity — columns that exist in every schema version. These MUST
-  // land: current_project_name is what tells a future login "this person
-  // already onboarded, welcome them back".
+  // Core identity + progress — columns that exist in base schema.sql. These
+  // MUST land: current_project_name is what tells a future login "this person
+  // already onboarded, welcome them back"; builder_score/streak keep their
+  // level and fire from resetting on a new browser.
   const core = {
     id: userId,
     ...(p.username ? { username: p.username } : {}),
@@ -184,24 +197,39 @@ export function pushProfile(userId: string, p: Partial<Profile> & { email?: stri
     ...(p.github !== undefined ? { github_username: p.github } : {}),
     ...(p.tone ? { default_tone: p.tone } : {}),
     ...(p.theme ? { theme: p.theme } : {}),
+    // Progress — base-schema columns, so these are safe even without upgrades.
+    ...(p.builderScore !== undefined ? { builder_score: p.builderScore } : {}),
+    ...(p.streakCurrent !== undefined ? { streak_current: p.streakCurrent } : {}),
+    ...(p.streakLongest !== undefined ? { streak_longest: p.streakLongest } : {}),
+    ...(p.totalShips !== undefined ? { total_ships: p.totalShips } : {}),
     updated_at: new Date().toISOString(),
   }
-  // Newer columns (upgrade-payments-accounts.sql). If the DB hasn't run that
-  // migration yet, the full upsert fails with 42703 — retry with core only so
-  // one missing column can never wipe out the whole profile save again.
+  // Newer columns (upgrade SQL). If the DB hasn't run those migrations yet,
+  // the full upsert fails with 42703 — retry with core only so one missing
+  // column can never wipe out the whole profile save again.
   const full = {
     ...core,
     ...(p.startStage ? { start_stage: p.startStage } : {}),
     ...(p.email ? { email: p.email } : {}),
     ...(p.avatar !== undefined ? { avatar: p.avatar } : {}),
     ...(p.avatarHue !== undefined ? { avatar_hue: p.avatarHue } : {}),
+    // Achievements + AI credits (upgrade-4). Cross-browser memory of progress.
+    ...(p.unlocked !== undefined ? { unlocked: p.unlocked } : {}),
+    ...(p.aiWeek !== undefined ? { ai_week: p.aiWeek } : {}),
+    ...(p.aiWeekCount !== undefined ? { ai_week_count: p.aiWeekCount } : {}),
+    ...(p.aiUsed !== undefined ? { ai_used: p.aiUsed } : {}),
   }
   supabase.from('profiles').upsert(full, { onConflict: 'id' }).then(({ error }) => {
     if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message))) {
-      console.error('[sync] profile: DB is missing newer columns — run supabase/upgrade-payments-accounts.sql. Saving core fields only.')
-      supabase!.from('profiles').upsert(core, { onConflict: 'id' }).then(({ error: e2 }) => noteResult('profile', e2))
+      console.error('[sync] profile: DB is missing newer columns — run the latest supabase/upgrade-*.sql. Saving core fields only.')
+      supabase!.from('profiles').upsert(core, { onConflict: 'id' }).then(({ error: e2 }) => {
+        noteResult('profile', e2)
+        // Even core failed (offline / transient) — queue it so it retries.
+        if (e2 && e2.code !== '23505') enqueue({ table: 'profiles', row: core, conflict: 'id' })
+      })
     } else {
       noteResult('profile', error)
+      if (error && error.code !== '23505') enqueue({ table: 'profiles', row: full, conflict: 'id' })
     }
   })
 }

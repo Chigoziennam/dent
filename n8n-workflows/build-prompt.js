@@ -34,6 +34,62 @@ const picked = b.picked ?? [];
 const sourceEventIds = dbShips.map(e => e.id).filter(Boolean);
 
 // ------------------------------------------------------------
+// 0. BUDGET — refuse before spending, not after.
+// These caps mirror ENTITLEMENTS in src/lib/plan.ts. They live here TOO
+// because the browser copy is advisory: localStorage is editable and anyone
+// can POST this webhook directly with curl. This is the copy that actually
+// holds, because it is the one standing between a request and the model.
+// Reuses the noData flag so the existing Has ships? branch routes it away
+// from the AI — one guard, two reasons.
+// ------------------------------------------------------------
+const CAPS = {
+  free: { writesWeek: 7,   writesMonth: 28,  chatDay: 15  },
+  pro:  { writesWeek: 60,  writesMonth: 150, chatDay: 60  },
+  team: { writesWeek: 200, writesMonth: 500, chatDay: 200 },
+};
+
+const profileRow = (() => {
+  try { return $('Fetch profile').all().map(i => i.json).find(r => r && r.id) || null; }
+  catch { return null; }
+})();
+const usageRow = (() => {
+  try { return $('Fetch AI usage').all().map(i => i.json).find(r => r && r.user_id) || null; }
+  catch { return null; }
+})();
+
+const tier = profileRow?.tier ?? 'free';
+const caps = CAPS[tier] ?? CAPS.free;
+const used = {
+  chatToday:   Number(usageRow?.chat_today   ?? 0),
+  writesWeek:  Number(usageRow?.writes_week  ?? 0),
+  writesMonth: Number(usageRow?.writes_month ?? 0),
+};
+
+// Signed-out demo users have no row to count against, so they are not metered
+// here — the client-side free cap is the only gate for them. Nothing they do
+// can be attributed to an account anyway.
+let overBudget = null;
+if (b.hasUser) {
+  if (task === 'chat' && used.chatToday >= caps.chatDay) {
+    overBudget = `You have used all ${caps.chatDay} co-pilot messages for today. They reset tomorrow.`;
+  } else if (task !== 'chat' && used.writesMonth >= caps.writesMonth) {
+    overBudget = `You have used all ${caps.writesMonth} AI writes this month.${tier === 'free' ? ' Upgrade for more.' : ''}`;
+  } else if (task !== 'chat' && used.writesWeek >= caps.writesWeek) {
+    overBudget = `You have used all ${caps.writesWeek} AI writes this week. They reset Monday.${tier === 'free' ? ' Upgrade to keep writing.' : ''}`;
+  }
+}
+
+if (overBudget) {
+  return [{ json: {
+    noData: true, overBudget: true, tier,
+    text: overBudget,
+    task, range: b.range, userId: b.userId, hasUser: b.hasUser,
+    platform: b.platform ?? 'twitter', tone: b.tone ?? 'founder',
+    sourceEventIds: [], shipCount: 0, fromDb: false
+  } }];
+}
+
+// ------------------------------------------------------------
 // 1. HARD STOP — never ask the model to write about nothing.
 // A brand-new user with zero ships got back "refactored core onboarding
 // flows, prepping for next week's big feature drop" — pure fabrication that

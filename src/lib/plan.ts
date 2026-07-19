@@ -12,18 +12,28 @@ export const tierOf = (p?: Profile | null): Tier => (p?.tier ?? 'free')
 export const TIER_LABEL: Record<Tier, string> = { free: 'Free', pro: 'Pro', team: 'CEO Mode' }
 
 export interface Entitlements {
-  aiPerWeek: number             // Infinity once paid
+  aiPerWeek: number             // writer generations (free tier resets weekly)
+  aiPerMonth: number            // writer ceiling on paid tiers
+  chatPerDay: number            // co-pilot messages — its own budget, resets daily
   manualEventsPerMonth: number  // Infinity once paid — GitHub imports are exempt
   humanWriter: boolean          // "Raw notes → Human" writer mode
   proPlatforms: boolean         // Product Hunt + Resume outputs
 }
 
+// Why these numbers and not "unlimited":
+// Every generation is a real OpenRouter call. Measured cost is ~$0.0147 per
+// writer post (Sonnet, ~2.4k in / 500 out) and ~$0.0016 per co-pilot message
+// (Haiku, after the chat context trim). Unlimited on a $9 plan meant a heavy
+// user cost more than they paid — we lost most on the users least likely to
+// churn. These caps are set so that a user who maxes EVERY day still leaves
+// margin (Pro worst case ≈ $5.18/mo against $9), while sitting far enough
+// above real usage that nobody normal ever sees them. Same shape as Claude's
+// own limits: a ceiling that bounds abuse, not a meter that nags.
+// NOTE: team's worst case is ≈ $17.25/mo — it needs to be priced at $29+.
 export const ENTITLEMENTS: Record<Tier, Entitlements> = {
-  // Free gets a generous 7/week on purpose — enough to feel the value and get
-  // hooked before hitting the wall that sells Pro.
-  free: { aiPerWeek: 7,        manualEventsPerMonth: 30,       humanWriter: false, proPlatforms: false },
-  pro:  { aiPerWeek: Infinity, manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: false },
-  team: { aiPerWeek: Infinity, manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: true  },
+  free: { aiPerWeek: 7,   aiPerMonth: 28,  chatPerDay: 15,  manualEventsPerMonth: 30,       humanWriter: false, proPlatforms: false },
+  pro:  { aiPerWeek: 60,  aiPerMonth: 150, chatPerDay: 60,  manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: false },
+  team: { aiPerWeek: 200, aiPerMonth: 500, chatPerDay: 200, manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: true  },
 }
 
 export const entitlementsFor = (p?: Profile | null): Entitlements => ENTITLEMENTS[tierOf(p)]

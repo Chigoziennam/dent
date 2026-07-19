@@ -85,25 +85,29 @@ export default function Write() {
   // out. This is how you talk about exactly the commits you choose — the
   // site offers them, you decide.
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
-  useEffect(() => { setExcluded(new Set()) }, [range, focusRepo])
+  useEffect(() => { setExcluded(new Set()) }, [range, focusRepo, source])
   const toggleShip = (id: string) => setExcluded(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id)
     else next.add(id)
     return next
   })
-  const activeEvents = useMemo(() => rangeEvents.filter(e => !excluded.has(e.id)), [rangeEvents, excluded])
+  // Source-filtered and manual-first. GitHub commits arrive in bulk and are
+  // newest-first, so hand-logged ships — the launch, the revenue note, the
+  // customer call — used to be pushed past the display cut and become
+  // invisible. They are usually the ships most worth writing about.
+  const sourceEvents = useMemo(() => {
+    const filtered = rangeEvents.filter(e =>
+      source === 'all' ? true : source === 'github' ? e.source === 'github' : e.source !== 'github')
+    return [...filtered.filter(e => e.source !== 'github'), ...filtered.filter(e => e.source === 'github')]
+  }, [rangeEvents, source])
+
+  const activeEvents = useMemo(() => sourceEvents.filter(e => !excluded.has(e.id)), [sourceEvents, excluded])
 
   // What the Fusion picker offers. Manual ships sort FIRST, then the cap
   // applies — otherwise a busy commit week buries the milestone you actually
   // wanted to post about. Raised 20 -> 40 as well; the list scrolls.
-  const pickable = useMemo(() => {
-    const filtered = rangeEvents.filter(e =>
-      source === 'all' ? true : source === 'github' ? e.source === 'github' : e.source !== 'github')
-    const manual = filtered.filter(e => e.source !== 'github')
-    const github = filtered.filter(e => e.source === 'github')
-    return [...manual, ...github].slice(0, 40)
-  }, [rangeEvents, source])
+  const pickable = useMemo(() => sourceEvents.slice(0, 40), [sourceEvents])
   const rangeLogs = useMemo(() => dailyLogs.filter(l => l.logDate >= cutoff), [dailyLogs, cutoff])
 
   const pickPlatform = (p: { key: ContentPlatform; pro?: boolean }) => {
@@ -216,15 +220,35 @@ export default function Write() {
                 <SectionTitle>Source Material · {activeEvents.length}{excluded.size > 0 ? ` of ${rangeEvents.length}` : ''} events</SectionTitle>
                 <ChevronDown size={14} className={`text-muted transition-transform lg:hidden ${contextOpen ? 'rotate-180' : ''}`} />
               </button>
-              {/* Repo focus — write about one project or the whole log */}
-              {rangeRepos.length > 0 && (
+              {/* Where the material comes from. Manual ships (today's log,
+                  milestones, revenue notes) and GitHub commits sit side by
+                  side so you can write from either, or both. */}
+              <div className="no-scrollbar mb-2 flex items-center gap-1.5 overflow-x-auto">
+                <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted">Source</span>
+                {([
+                  { k: 'all' as const, label: 'Everything' },
+                  { k: 'manual' as const, label: 'Logged by me' },
+                  { k: 'github' as const, label: 'From GitHub' },
+                ]).map(o => (
+                  <button key={o.k} type="button" onClick={() => setSource(o.k)}
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${source === o.k ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}>
+                    {o.label}
+                    <span className="ml-1 font-mono opacity-60">
+                      {o.k === 'all' ? rangeEvents.length : rangeEvents.filter(e => o.k === 'github' ? e.source === 'github' : e.source !== 'github').length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {/* Repo focus narrows the GitHub side only — manual ships belong
+                  to the project story whichever repo they touched. */}
+              {rangeRepos.length > 0 && source !== 'manual' && (
                 <div className="no-scrollbar mb-3 flex items-center gap-1.5 overflow-x-auto">
                   <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted">Repo</span>
                   <button
                     type="button" onClick={() => setFocusRepo(null)}
                     className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium ${focusRepo === null ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}
                   >
-                    All
+                    All repos
                   </button>
                   {rangeRepos.map(r => (
                     <button
@@ -238,7 +262,7 @@ export default function Write() {
               )}
               <div className={`space-y-2 ${contextOpen ? '' : 'hidden lg:block'}`}>
                 <div className="pb-1 text-[10.5px] text-muted">Tap a ship to leave it out — the post only uses what's lit.</div>
-                {rangeEvents.slice(0, 20).map(e => {
+                {sourceEvents.slice(0, 40).map(e => {
                   const out = excluded.has(e.id)
                   return (
                     <button
@@ -247,11 +271,13 @@ export default function Write() {
                     >
                       <CategoryPill category={e.category} />
                       <span className={`truncate text-xs ${out ? 'text-muted line-through' : 'text-secondary'}`}>{e.title}</span>
-                      {repoOf(e) && <span className="ml-auto shrink-0 font-mono text-[9.5px] text-muted">{repoOf(e)}</span>}
+                      <span className="ml-auto shrink-0 font-mono text-[9px] uppercase tracking-wide text-muted">
+                        {e.source === 'github' ? (repoOf(e) ?? 'github') : 'yours'}
+                      </span>
                     </button>
                   )
                 })}
-                {rangeEvents.length > 20 && <div className="pt-1 text-center font-mono text-[11px] text-muted">+ {rangeEvents.length - 20} more feeding the AI</div>}
+                {sourceEvents.length > 40 && <div className="pt-1 text-center font-mono text-[11px] text-muted">+ {sourceEvents.length - 40} more feeding the AI</div>}
               </div>
             </div>
           ) : mode === 'fusion' ? (

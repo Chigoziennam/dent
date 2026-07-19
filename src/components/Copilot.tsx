@@ -103,7 +103,7 @@ export function Copilot() {
         whileTap={{ scale: 0.92 }}
         animate={{ y: [0, -4, 0] }}
         transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-        className="fixed bottom-24 right-4 z-40 flex h-13 w-13 items-center justify-center overflow-hidden rounded-2xl md:bottom-6 md:right-6"
+        className="fixed bottom-24 right-4 z-40 flex h-13 w-13 items-center justify-center rounded-2xl md:bottom-6 md:right-6"
         style={{
           height: 52, width: 52,
           // Deep space, not a flat purple chip: a near-black well with an
@@ -117,32 +117,45 @@ export function Copilot() {
         }}
         aria-label="Open co-pilot"
       >
+        {/* The aurora needs clipping to the rounded well, but the ping sits
+            OUTSIDE the button edge — so only this wrapper clips, not the
+            button, or the dot gets cut in half. */}
         {!open && (
-          <motion.span
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{ background: 'linear-gradient(115deg, transparent 35%, rgba(196,181,253,0.22) 50%, transparent 65%)' }}
-            animate={{ x: ['-120%', '120%'] }}
-            transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', repeatDelay: 2.5 }}
-          />
+          <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+            <motion.span
+              className="absolute inset-0"
+              style={{ background: 'linear-gradient(115deg, transparent 35%, rgba(196,181,253,0.22) 50%, transparent 65%)' }}
+              animate={{ x: ['-120%', '120%'] }}
+              transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', repeatDelay: 2.5 }}
+            />
+          </span>
         )}
         <motion.span animate={{ rotate: open ? 90 : 0 }} className="relative flex items-center justify-center">
           {open ? <X size={20} className="text-white" /> : <AICore size={32} />}
         </motion.span>
         {/* attention ping until the first briefing is read */}
         {!open && !briefed.current && (
-          <>
+          <span className="pointer-events-none absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center">
+            {/* expanding halo */}
             <motion.span
-              className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-success"
-              animate={{ scale: [1, 1.25, 1] }}
-              transition={{ duration: 1.2, repeat: Infinity }}
+              className="absolute h-3.5 w-3.5 rounded-full"
+              style={{ background: 'rgba(52,211,153,0.55)' }}
+              animate={{ scale: [1, 2.6], opacity: [0.65, 0] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }}
             />
+            {/* solid dot with a dark ring so it reads against the glow, and
+                its own green shadow so it looks lit rather than painted */}
             <motion.span
-              className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-success"
-              animate={{ scale: [1, 2.4], opacity: [0.7, 0] }}
-              transition={{ duration: 1.2, repeat: Infinity, ease: 'easeOut' }}
+              className="relative h-2.5 w-2.5 rounded-full"
+              style={{
+                background: 'radial-gradient(circle at 35% 30%, #6ee7b7, #10b981 70%)',
+                border: '1.5px solid rgba(11,10,31,0.9)',
+                boxShadow: '0 0 8px rgba(16,185,129,0.95), 0 0 16px rgba(16,185,129,0.5)',
+              }}
+              animate={{ scale: [1, 1.15, 1] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
             />
-          </>
+          </span>
         )}
       </motion.button>
 

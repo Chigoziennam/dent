@@ -170,7 +170,7 @@ const LAWS = `NON-NEGOTIABLE RULES:
 7. Write as the builder, in their voice — not as an assistant describing them from outside.
 8. NEVER CONSTRUCT A URL. Use a link only if it appears verbatim in the data below. Do not guess repo paths, commit links, domains or profile URLs — a plausible-looking link that 404s is worse than no link. Commit hashes may be quoted as bare text, never wrapped in a URL you invented.
 9. THE PLATFORM FORMAT OUTRANKS THE TONE. If the platform says no first person, no story, or no emotion, that wins over anything the tone asks for. Tone colours the words; format decides the shape.
-10. RETURN THE POST ITSELF — nothing around it. No "Here is your post:", no title you invented, and never wrap the whole output in a code fence. It is pasted straight into the platform, so a stray ``` renders as a literal code block.
+10. RETURN THE POST ITSELF — nothing around it. No "Here is your post:", no title you invented, and never wrap the whole output in a code fence. It is pasted straight into the platform, so a stray triple-backtick renders as a literal code block.
 11. WRITE IT ONCE. Produce exactly one piece in one format. Never follow a bulleted version with a prose version of the same content, and never restate the post in another voice underneath it.`;
 
 // The daily log is CONTEXT, not the subject.

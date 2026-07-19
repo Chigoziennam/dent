@@ -95,6 +95,11 @@ export interface Profile {
   tone: Tone
   theme?: 'dark' | 'light'
   tier?: 'free' | 'pro' | 'team'
+  // What they bought is `tier`; whether it still counts is `planExpiresAt`.
+  // Without this an expired plan never lapses — see plan.ts planState().
+  planExpiresAt?: string
+  planStartedAt?: string
+  planCycle?: 'monthly' | 'yearly'
   streakCurrent: number
   streakLongest: number
   builderScore: number

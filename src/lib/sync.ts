@@ -191,6 +191,11 @@ export function pushProfile(userId: string, p: ProfileSync) {
     ...(p.projectName ? { current_project_name: p.projectName } : {}),
     ...(p.projectTagline !== undefined ? { current_project_tagline: p.projectTagline } : {}),
     ...(p.tier ? { tier: p.tier } : {}),
+    // Expiry travels WITH the tier — a tier that syncs without its expiry
+    // date silently becomes permanent again on the next device.
+    ...(p.planExpiresAt !== undefined ? { plan_expires_at: p.planExpiresAt } : {}),
+    ...(p.planStartedAt !== undefined ? { plan_started_at: p.planStartedAt } : {}),
+    ...(p.planCycle !== undefined ? { plan_cycle: p.planCycle } : {}),
     // The rest of who they are — links, voice, look. All exist in schema.sql.
     ...(p.website !== undefined ? { website: p.website } : {}),
     ...(p.twitter !== undefined ? { twitter_handle: p.twitter } : {}),

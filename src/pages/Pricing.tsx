@@ -150,7 +150,25 @@ export default function Pricing() {
       onSuccess: (tx: { reference?: string }) => {
         // Activate EXACTLY the plan they paid for, and sync the tier to cloud.
         // One paid plan now, so every successful checkout lands on 'pro'.
-        updateProfile({ tier: 'pro' })
+        // The expiry is what makes it a subscription rather than a one-time
+        // unlock — without it a single ₦5,000 bought Pro forever. Renewals
+        // extend from the later of now and the current expiry, so paying
+        // early adds time instead of throwing the remainder away.
+        const now = new Date()
+        const current = /* existing expiry, if the plan is still running */
+          (useDent.getState().profile.planExpiresAt
+            && new Date(useDent.getState().profile.planExpiresAt as string) > now)
+            ? new Date(useDent.getState().profile.planExpiresAt as string)
+            : now
+        const expires = new Date(current)
+        if (confirm.cycle === 'yearly') expires.setFullYear(expires.getFullYear() + 1)
+        else expires.setMonth(expires.getMonth() + 1)
+        updateProfile({
+          tier: 'pro',
+          planStartedAt: now.toISOString(),
+          planExpiresAt: expires.toISOString(),
+          planCycle: confirm.cycle,
+        })
         recordPayment({ email, amountMinor, currency: 'NGN', tier: confirm.tier, cycle: confirm.cycle, reference: tx?.reference })
         track('payment_success', { tier: confirm.tier, cycle: confirm.cycle, currency: confirm.currency })
         setPaying(false)

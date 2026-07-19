@@ -260,6 +260,12 @@ export const useDent = create<DentState>()(
                 projectTagline: (cp.current_project_tagline as string) ?? profile.projectTagline,
                 startStage: (cp.start_stage as Profile['startStage']) ?? profile.startStage,
                 tier: (cp.tier as Profile['tier']) ?? profile.tier,
+                // Cloud is authoritative for expiry. A local copy that says
+                // "pro" with no end date is exactly the hole this closes, so
+                // the server's date always wins on hydration.
+                planExpiresAt: (cp.plan_expires_at as string) ?? profile.planExpiresAt,
+                planStartedAt: (cp.plan_started_at as string) ?? profile.planStartedAt,
+                planCycle: (cp.plan_cycle as Profile['planCycle']) ?? profile.planCycle,
                 // The look and voice they chose — a new browser must show THEM.
                 // `||` (not `??`) so an empty saved avatar still falls back.
                 avatar: (cp.avatar as string) ?? profile.avatar,

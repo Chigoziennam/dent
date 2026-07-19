@@ -8,7 +8,43 @@ import type { Profile, ContentPlatform } from './types'
 
 export type Tier = 'free' | 'pro' | 'team'
 
-export const tierOf = (p?: Profile | null): Tier => (p?.tier ?? 'free')
+// What they BOUGHT. Not necessarily what they still have — see tierOf.
+export const purchasedTier = (p?: Profile | null): Tier => (p?.tier ?? 'free')
+
+// Three days after expiry the plan still works. Cards fail for boring reasons
+// — an expired card, a bank flagging a foreign charge — and locking someone
+// out the same hour their renewal bounced punishes them for their bank's
+// behaviour. Long enough to fix it, short enough not to be a free month.
+export const GRACE_DAYS = 3
+
+export type PlanState = 'free' | 'active' | 'grace' | 'expired'
+
+export function planState(p?: Profile | null): PlanState {
+  if (!p || (p.tier ?? 'free') === 'free') return 'free'
+  if (!p.planExpiresAt) return 'active' // legacy row, upgrade-8 backfills these
+  const expiry = new Date(p.planExpiresAt).getTime()
+  if (Number.isNaN(expiry)) return 'active'
+  const now = Date.now()
+  if (now <= expiry) return 'active'
+  if (now <= expiry + GRACE_DAYS * 864e5) return 'grace'
+  return 'expired'
+}
+
+// THE tier — what the user actually gets right now. An expired plan collapses
+// to free here, which is what closes the "pay once, keep Pro forever" hole:
+// checkout used to set tier = 'pro' with nothing that ever unset it.
+// Everything downstream (entitlements, platform gates, caps) reads this.
+export const tierOf = (p?: Profile | null): Tier => {
+  const state = planState(p)
+  return state === 'expired' || state === 'free' ? 'free' : (p?.tier ?? 'free')
+}
+
+// Days until the plan lapses — negative once it has. For "renews in 4 days"
+// and for the grace-period banner.
+export function daysLeft(p?: Profile | null): number | null {
+  if (!p?.planExpiresAt) return null
+  return Math.ceil((new Date(p.planExpiresAt).getTime() - Date.now()) / 864e5)
+}
 // 'team' is a legacy tier — anyone on it keeps Pro access, labelled as Pro.
 export const TIER_LABEL: Record<Tier, string> = { free: 'Free', pro: 'Pro', team: 'Pro' }
 

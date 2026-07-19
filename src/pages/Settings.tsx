@@ -7,16 +7,29 @@ import { pendingSyncCount, syncHealth } from '../lib/sync'
 
 import { Link } from 'react-router-dom'
 import { useDent } from '../lib/store'
-import { entitlementsFor, tierOf } from '../lib/plan'
+import { entitlementsFor, tierOf, planState, daysLeft } from '../lib/plan'
 import { TONE_META, type Tone } from '../lib/types'
 import { Page, GlassCard, SectionTitle, AnimatedAvatar } from '../components/ui'
+
+// The real prices, in both currencies, so the number here matches the number
+// at the Paystack popup. Mirrors PRICES in src/pages/Pricing.tsx.
+const PLAN_OPTIONS = [
+  { cycle: 'monthly' as const, label: 'Pro · monthly', ngn: 5000, usd: 9, note: null },
+  { cycle: 'yearly' as const, label: 'Pro · yearly', ngn: 4200 * 12, usd: 7 * 12, note: '2 months free' },
+]
 
 export default function Settings() {
   const { profile, updateProfile, logout } = useDent()
   const aiLeft = useDent(s => s.aiLeftThisWeek())
+  const ent = entitlementsFor(profile)
+  // 'free' | 'active' | 'grace' | 'expired' — drives the whole plan card.
+  const state = planState(profile)
+  const left = daysLeft(profile)
+  const expiryLabel = profile.planExpiresAt
+    ? new Date(profile.planExpiresAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    : null
   const [form, setForm] = useState(profile)
   const [saved, setSaved] = useState(false)
-  const [creditToast, setCreditToast] = useState(false)
   const navigate = useNavigate()
   const syncErr = syncHealth().error
   const pending = pendingSyncCount()
@@ -166,59 +179,116 @@ export default function Settings() {
       <GlassCard className="mt-4">
         <div className="flex items-center justify-between">
           <SectionTitle>Plan & AI Credits</SectionTitle>
-          <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${(profile.tier ?? 'free') === 'free' ? 'bg-white/5 text-muted' : 'streak-gradient text-white'}`}>
-            {(profile.tier ?? 'free') === 'free' ? 'Free plan' : profile.tier === 'team' ? 'CEO Mode' : 'Pro'}
+          <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
+          state === 'expired' ? 'bg-red-400/15 text-red-400'
+          : state === 'grace' ? 'bg-warning/15 text-warning'
+          : state === 'active' ? 'streak-gradient text-white'
+          : 'bg-white/5 text-muted'}`}>
+          {state === 'expired' ? 'Plan ended' : state === 'grace' ? 'Renewal due' : state === 'active' ? 'Pro' : 'Free plan'}
+        </span>
+      </div>
+
+      {/* An ended plan is the one thing that must never be quiet — the user
+          keeps every ship they logged, but the limits changed under them and
+          they deserve to know why before they hit a wall. */}
+      {state === 'expired' && (
+        <div className="mb-3 rounded-lg border border-red-400/30 bg-red-400/[0.07] px-3 py-2.5">
+          <p className="text-xs font-semibold text-red-400">Your Pro plan ended{expiryLabel ? ` on ${expiryLabel}` : ''}.</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-secondary">
+            You are back on the Free limits. Nothing you logged is lost — every ship, log and post is still here.
+            <Link to="/pricing" className="ml-1 font-semibold text-accent hover:underline">Renew to lift the limits →</Link>
+          </p>
+        </div>
+      )}
+      {state === 'grace' && (
+        <div className="mb-3 rounded-lg border border-warning/30 bg-warning/[0.07] px-3 py-2.5">
+          <p className="text-xs font-semibold text-warning">Renewal didn&apos;t go through.</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-secondary">
+            Pro stays on for {left !== null ? Math.max(0, left + 3) : 3} more day{left !== null && Math.max(0, left + 3) === 1 ? '' : 's'} while you sort it out — cards fail for boring reasons.
+            <Link to="/pricing" className="ml-1 font-semibold text-accent hover:underline">Retry payment →</Link>
+          </p>
+        </div>
+      )}
+      {state === 'active' && expiryLabel && (
+        <p className="mb-3 text-[11px] text-muted">
+          Pro is active — renews on <span className="text-secondary">{expiryLabel}</span>
+          {left !== null && left <= 7 ? ` (${left} day${left === 1 ? '' : 's'} away)` : ''}.
+        </p>
+      )}
+
+      {/* What they have left, stated as counts rather than a vague bar. */}
+      <div className="space-y-2.5">
+        {([
+          { label: 'AI posts this week', used: ent.aiPerWeek - aiLeft, cap: ent.aiPerWeek },
+          { label: 'Co-pilot messages today', used: null, cap: ent.chatPerDay },
+        ] as const).map(row => (
+          <div key={row.label}>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-secondary">{row.label}</span>
+              <span className="font-mono text-xs text-primary">
+                {row.used === null ? `up to ${row.cap}` : `${Math.max(0, row.cap - row.used)} / ${row.cap} left`}
+              </span>
+            </div>
+            {row.used !== null && (
+              <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-white/5">
+                <div className="h-full rounded-full transition-all" style={{
+                  width: `${Math.min(100, (Math.max(0, row.cap - row.used) / row.cap) * 100)}%`,
+                  background: row.cap - row.used === 0 ? '#f59e0b' : '#6366f1',
+                }} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Nobody should have to guess what spends a credit. */}
+      <div className="mt-3 rounded-lg border border-line bg-white/[0.02] px-3 py-2.5">
+        <p className="text-[11px] font-semibold text-secondary">What uses a credit?</p>
+        <ul className="mt-1.5 space-y-1 text-[11px] leading-relaxed text-muted">
+          <li>• <span className="text-secondary">One AI post</span> — writing from your ships, Fusion, or Raw notes → Human.</li>
+          <li>• <span className="text-secondary">One co-pilot message</span> — counted separately, so chatting never eats your posts.</li>
+          <li>• <span className="text-secondary">Free:</span> logging ships, GitHub sync, streaks, exports, and the Tighten / Thread / Stats tools.</li>
+        </ul>
+        <p className="mt-2 text-[11px] text-muted">
+          Posts reset every Monday, co-pilot messages reset at midnight. Unused credits don&apos;t roll over.
+        </p>
+      </div>
+
+      {/* Real prices in both currencies — no surprises at the Paystack popup. */}
+      {tierOf(profile) === 'free' || state !== 'active' ? (
+        <div className="mt-3">
+          <p className="text-[11px] text-muted">
+            Pro lifts this to <span className="text-secondary">100 posts a month and 30 co-pilot messages a day</span>,
+            plus unlimited logging, Fusion, and the Resume &amp; Product Hunt formats.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {PLAN_OPTIONS.map(o => (
+              <Link key={o.cycle} to="/pricing"
+                className="flex flex-col rounded-xl border border-line px-3.5 py-2 transition-colors hover:border-accent/50">
+                <span className="text-xs font-semibold text-primary">{o.label}</span>
+                <span className="font-mono text-[11px] text-accent">
+                  ₦{o.ngn.toLocaleString()} <span className="text-muted">· ${o.usd}</span>
+                </span>
+                {o.note && <span className="text-[10px] text-success">{o.note}</span>}
+              </Link>
+            ))}
+            <Link to="/pricing" className="flex items-center rounded-xl bg-accent/15 px-3.5 py-2 text-xs font-semibold text-accent hover:bg-accent/25">
+              {state === 'expired' || state === 'grace' ? 'Renew now →' : 'See plans →'}
+            </Link>
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-muted">
+            Charged in naira through Paystack. Outside Nigeria, any Visa, Mastercard or Amex works —
+            your bank converts the ${PLAN_OPTIONS[0].usd} automatically (some banks add a 1-3% foreign-transaction fee).
+          </p>
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/[0.06] px-3 py-2.5">
+          <Zap size={14} className="text-accent" />
+          <span className="text-xs text-secondary">
+            <span className="font-semibold text-primary">Pro is active.</span> Thanks for shipping with us.
           </span>
         </div>
-        {tierOf(profile) === 'free' ? (
-          <>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-secondary">Free AI generations left this week</span>
-              <span className="font-mono text-xs text-primary">{aiLeft} / {entitlementsFor(profile).aiPerWeek}</span>
-            </div>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/5">
-              <div
-                className="h-full rounded-full transition-all"
-                style={{
-                  width: `${Math.min(100, (aiLeft / entitlementsFor(profile).aiPerWeek) * 100)}%`,
-                  background: aiLeft === 0 ? '#f59e0b' : '#6366f1',
-                }}
-              />
-            </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              The Free plan includes {entitlementsFor(profile).aiPerWeek} AI generations a week and logs 30 ships a month. GitHub commit sync is
-              always on. <Link to="/pricing" className="font-semibold text-accent hover:underline">Go Pro</Link> for
-              unlimited AI, unlimited logging and the Raw-notes→Human writer.
-            </p>
-          </>
-        ) : (
-          <div className="flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/[0.06] px-3 py-2.5">
-            <Zap size={14} className="text-accent" />
-            <span className="text-xs text-secondary">
-              <span className="font-semibold text-primary">Unlimited AI generations</span> — {tierOf(profile) === 'team' ? 'CEO Mode' : 'Pro'} is active. Thanks for shipping with us.
-            </span>
-          </div>
-        )}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {[
-            { label: '+100 credits', price: '$3' },
-            { label: '+250 credits', price: '$6' },
-            { label: '+600 credits', price: '$12' },
-          ].map(c => (
-            <button
-              key={c.label}
-              type="button"
-              onClick={() => setCreditToast(true)}
-              className="flex items-center gap-2 rounded-xl border border-line px-3.5 py-2 text-xs font-medium text-secondary transition-colors hover:border-accent/50 hover:text-primary"
-            >
-              <Zap size={12} className="text-warning" /> {c.label} <span className="font-mono text-muted">{c.price}</span>
-            </button>
-          ))}
-          <Link to="/pricing" className="flex items-center rounded-xl bg-accent/15 px-3.5 py-2 text-xs font-semibold text-accent hover:bg-accent/25">
-            See plans →
-          </Link>
-        </div>
-        {creditToast && <p className="mt-2 text-[11px] text-success">Credit top-ups go live with payments at launch — Paystack confirmer is already wired ✓</p>}
+      )}
       </GlassCard>
 
       <GlassCard className="mt-4">

@@ -57,7 +57,18 @@ const usageRow = (() => {
   catch { return null; }
 })();
 
-const tier = profileRow?.tier ?? 'free';
+// An EXPIRED plan is a free plan. The app collapses the tier in plan.ts, but
+// that copy is advisory — someone can POST this webhook directly with a
+// stale token and a 'pro' row. This is where it actually stops. Mirrors
+// planState()/GRACE_DAYS: 3 days of grace, because cards fail for boring
+// reasons and a bounced renewal shouldn't lock someone out the same hour.
+const GRACE_MS = 3 * 864e5;
+const boughtTier = profileRow?.tier ?? 'free';
+const expiresAt = profileRow?.plan_expires_at ? Date.parse(profileRow.plan_expires_at) : null;
+const planLapsed = boughtTier !== 'free'
+  && expiresAt !== null && !Number.isNaN(expiresAt)
+  && Date.now() > expiresAt + GRACE_MS;
+const tier = planLapsed ? 'free' : boughtTier;
 const caps = CAPS[tier] ?? CAPS.free;
 const used = {
   chatToday:   Number(usageRow?.chat_today   ?? 0),
@@ -70,7 +81,9 @@ const used = {
 // can be attributed to an account anyway.
 let overBudget = null;
 if (b.hasUser) {
-  if (task === 'chat' && used.chatToday >= caps.chatDay) {
+  if (planLapsed) {
+    overBudget = 'Your Pro plan has ended, so you are back on the Free limits. Renew from the Plan page to pick up where you left off — nothing you logged is lost.';
+  } else if (task === 'chat' && used.chatToday >= caps.chatDay) {
     overBudget = `You have used all ${caps.chatDay} co-pilot messages for today. They reset tomorrow.`;
   } else if (task !== 'chat' && used.writesMonth >= caps.writesMonth) {
     overBudget = `You have used all ${caps.writesMonth} AI writes this month.${tier === 'free' ? ' Upgrade for more.' : ''}`;

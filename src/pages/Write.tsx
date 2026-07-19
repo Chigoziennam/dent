@@ -231,7 +231,8 @@ export default function Write() {
                   { k: 'github' as const, label: 'From GitHub' },
                 ]).map(o => (
                   <button key={o.k} type="button" onClick={() => setSource(o.k)}
-                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${source === o.k ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}>
+                    aria-pressed={source === o.k}
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${source === o.k ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}>
                     {o.label}
                     <span className="ml-1 font-mono opacity-60">
                       {o.k === 'all' ? rangeEvents.length : rangeEvents.filter(e => o.k === 'github' ? e.source === 'github' : e.source !== 'github').length}
@@ -261,13 +262,32 @@ export default function Write() {
                 </div>
               )}
               <div className={`space-y-2 ${contextOpen ? '' : 'hidden lg:block'}`}>
-                <div className="pb-1 text-[10.5px] text-muted">Tap a ship to leave it out — the post only uses what's lit.</div>
+                {/* Untapping 30 ships one at a time to write about two is not
+                    a workflow. Bulk controls make the narrow post as cheap as
+                    the wide one. */}
+                <div className="flex items-center justify-between gap-2 pb-1">
+                  <span className="text-[10.5px] text-muted">Tap a ship to leave it out — the post only uses what&apos;s lit.</span>
+                  <span className="flex shrink-0 gap-1">
+                    <button type="button" onClick={() => setExcluded(new Set())}
+                      disabled={excluded.size === 0}
+                      className="rounded-md border border-line px-2 py-0.5 text-[10px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
+                      Use all
+                    </button>
+                    <button type="button" onClick={() => setExcluded(new Set(sourceEvents.map(e => e.id)))}
+                      disabled={excluded.size === sourceEvents.length}
+                      className="rounded-md border border-line px-2 py-0.5 text-[10px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
+                      Clear
+                    </button>
+                  </span>
+                </div>
                 {sourceEvents.slice(0, 40).map(e => {
                   const out = excluded.has(e.id)
                   return (
                     <button
                       key={e.id} type="button" onClick={() => toggleShip(e.id)}
-                      className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all ${out ? 'border-line/50 bg-transparent opacity-40' : 'border-line bg-white/[0.02]'}`}
+                      aria-pressed={!out}
+                      aria-label={`${out ? 'Include' : 'Leave out'} ${e.title}`}
+                      className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${out ? 'border-line/50 bg-transparent opacity-40' : 'border-line bg-white/[0.02]'}`}
                     >
                       <CategoryPill category={e.category} />
                       <span className={`truncate text-xs ${out ? 'text-muted line-through' : 'text-secondary'}`}>{e.title}</span>
@@ -283,9 +303,23 @@ export default function Write() {
           ) : mode === 'fusion' ? (
             <div className="glass flex flex-col p-5">
               <SectionTitle>Step 1 · Pick your ships</SectionTitle>
-              <p className="mb-2.5 text-xs leading-relaxed text-muted">
-                Tap the events that belong in this post — they become the facts.
-              </p>
+              <div className="mb-2.5 flex items-center justify-between gap-2">
+                <p className="text-xs leading-relaxed text-muted">
+                  Tap the events that belong in this post — they become the facts.
+                </p>
+                <span className="flex shrink-0 gap-1">
+                  <button type="button" onClick={() => setPicked(new Set(pickable.map(e => e.id)))}
+                    disabled={pickable.every(e => picked.has(e.id))}
+                    className="rounded-md border border-line px-2 py-0.5 text-[10px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
+                    Select all
+                  </button>
+                  <button type="button" onClick={() => setPicked(new Set())}
+                    disabled={picked.size === 0}
+                    className="rounded-md border border-line px-2 py-0.5 text-[10px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
+                    Clear
+                  </button>
+                </span>
+              </div>
               <div className="mb-2 flex gap-1.5">
                 {([
                   { k: 'all' as const, label: 'Everything' },
@@ -305,8 +339,10 @@ export default function Write() {
                 {pickable.map(e => {
                   const on = picked.has(e.id)
                   return (
-                    <button key={e.id} onClick={() => togglePick(e.id)}
-                      className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all ${on ? 'border-accent/60 bg-accent/10' : 'border-line bg-white/[0.02] opacity-70 hover:opacity-100'}`}>
+                    <button key={e.id} type="button" onClick={() => togglePick(e.id)}
+                      aria-pressed={on}
+                      aria-label={`${on ? 'Remove' : 'Add'} ${e.title}`}
+                      className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${on ? 'border-accent/60 bg-accent/10' : 'border-line bg-white/[0.02] opacity-70 hover:opacity-100'}`}>
                       <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] ${on ? 'border-accent bg-accent text-white' : 'border-line'}`}>
                         {on && '✓'}
                       </span>

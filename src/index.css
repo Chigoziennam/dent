@@ -97,10 +97,12 @@ body {
   66% { transform: translate(-4%, 8%) rotate(-30deg) scale(0.95); }
   100% { transform: translate(-8%, -6%) rotate(0deg) scale(1); }
 }
-@keyframes aurora-hue {
-  0%, 100% { filter: blur(70px) hue-rotate(0deg); }
-  50% { filter: blur(70px) hue-rotate(40deg); }
-}
+/* aurora-hue used to animate `filter: blur(70px) hue-rotate()`. Animating a
+   filter re-rasterises the whole blurred layer every single frame — it cannot
+   be composited like a transform — and this element is full-viewport on every
+   page. It cost roughly a third of the frame budget at idle for a colour
+   shift almost nobody would notice. The blur is now static; only the
+   transform drift animates, which the compositor handles for free. */
 .aurora {
   position: absolute;
   inset: -20%;
@@ -112,7 +114,8 @@ body {
     radial-gradient(ellipse 40% 30% at 75% 25%, rgba(236, 72, 153, 0.35), transparent 70%),
     radial-gradient(ellipse 50% 40% at 55% 75%, rgba(6, 182, 212, 0.28), transparent 70%),
     radial-gradient(ellipse 35% 30% at 15% 80%, rgba(139, 92, 246, 0.35), transparent 70%);
-  animation: aurora-drift 26s ease-in-out infinite, aurora-hue 18s ease-in-out infinite;
+  animation: aurora-drift 26s ease-in-out infinite;
+  will-change: transform;
 }
 :root[data-theme='light'] .aurora { opacity: 0.35; }
 
@@ -360,30 +363,6 @@ h1, h2, h3, .font-display {
 .pt-safe { padding-top: env(safe-area-inset-top); }
 
 /* ── Energy tank: flowing liquid + rising bubbles ── */
-@keyframes liquid-flow { from { transform: translateX(0); } to { transform: translateX(-36px); } }
-.tank-liquid { position: absolute; inset: 0; overflow: hidden; }
-.tank-liquid::after {
-  content: '';
-  position: absolute;
-  inset: 0 -40px 0 0;
-  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.07) 0 12px, transparent 12px 36px);
-  animation: liquid-flow 1.4s linear infinite;
-}
-@keyframes bubble-rise {
-  0% { transform: translateY(0) scale(0.5); opacity: 0; }
-  20% { opacity: 0.85; }
-  100% { transform: translateY(-40px) scale(1.1); opacity: 0; }
-}
-.tank-bubble {
-  position: absolute;
-  bottom: 3px;
-  width: 5px; height: 5px;
-  border-radius: 9999px;
-  background: rgba(255,255,255,0.55);
-  animation: bubble-rise 2.2s ease-in infinite;
-  pointer-events: none;
-}
-
 /* ── Animated avatar ring: slow-spinning conic aura ── */
 @keyframes ring-spin { to { transform: rotate(360deg); } }
 .avatar-ring::before {
@@ -411,4 +390,19 @@ input, textarea, select {
 input:focus-visible, textarea:focus-visible, select:focus-visible {
   border-color: rgba(99, 102, 241, 0.5) !important;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+
+/* ── Respect prefers-reduced-motion ─────────────────────────────────────
+   Ambient motion (aurora drift, starfield, shooting stars, shimmer) is
+   decoration. If the OS says reduce motion, it should stop — not slow down. */
+@media (prefers-reduced-motion: reduce) {
+  .aurora, .star-layer, .shooting-star, .shimmer, .star {
+    animation: none !important;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

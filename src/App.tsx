@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useDent } from './lib/store'
 import { supabase } from './lib/supabase'
@@ -7,18 +7,28 @@ import { track } from './lib/telemetry'
 import InstallPrompt from './components/InstallPrompt'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
-import Pricing from './pages/Pricing'
+const Pricing = lazy(() => import('./pages/Pricing'))
 import Shell from './components/Shell'
-import Today from './pages/Today'
-import Timeline from './pages/Timeline'
-import Week from './pages/Week'
-import Write from './pages/Write'
-import Analytics from './pages/Analytics'
-import Achievements from './pages/Achievements'
-import Integrations from './pages/Integrations'
-import Changelog from './pages/Changelog'
-import Settings from './pages/Settings'
-import { PublicProfile, PublicChangelog } from './pages/Profile'
+const Today = lazy(() => import('./pages/Today'))
+const Timeline = lazy(() => import('./pages/Timeline'))
+const Week = lazy(() => import('./pages/Week'))
+const Write = lazy(() => import('./pages/Write'))
+const Analytics = lazy(() => import('./pages/Analytics'))
+const Achievements = lazy(() => import('./pages/Achievements'))
+const Integrations = lazy(() => import('./pages/Integrations'))
+const Changelog = lazy(() => import('./pages/Changelog'))
+const Settings = lazy(() => import('./pages/Settings'))
+const PublicProfile = lazy(() => import('./pages/Profile').then(m => ({ default: m.PublicProfile })))
+const PublicChangelog = lazy(() => import('./pages/Profile').then(m => ({ default: m.PublicChangelog })))
+
+// Routes load on first visit instead of all shipping in one 1.2 MB bundle
+// that had to parse before anything rendered. Landing, Login and Shell stay
+// eager — they ARE the first paint, so deferring them would only add a
+// flash. The fallback is deliberately plain: a spinner that appears for
+// 80ms reads as jank, so this is just a held frame.
+function RouteFallback() {
+  return <div className="min-h-dvh bg-base" />
+}
 
 // Picks up the Supabase session after OAuth/magic-link redirects.
 // Real sessions go through realLogin: the demo seed is wiped, the profile
@@ -70,6 +80,7 @@ export default function App() {
       <AuthSync />
       <SyncPulse />
       <InstallPrompt />
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
@@ -90,6 +101,7 @@ export default function App() {
         <Route path="/:username/changelog" element={<PublicChangelog />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

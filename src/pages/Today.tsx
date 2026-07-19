@@ -9,8 +9,9 @@ import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill, AICore }
 import { AddEventModal } from '../components/AddEventModal'
 import { Mascot } from '../components/Mascot'
 import { repoOf } from '../lib/github'
+import { Link } from 'react-router-dom'
+import { entitlementsFor, planState, daysLeft } from '../lib/plan'
 import { uploadProof, syncHealth } from '../lib/sync'
-import { entitlementsFor } from '../lib/plan'
 import { ImagePlus, Loader2 } from 'lucide-react'
 
 // Builder moods — words first, not emoji soup
@@ -278,6 +279,7 @@ export default function Today() {
 
   return (
     <Page>
+      <PlanStrip />
       {/* ── Hero: greeting + streak ring + mascot ── */}
       <motion.div
         initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: 'easeOut' }}
@@ -817,85 +819,100 @@ function EnergyTank({ value, onChange }: { value: number; onChange: (n: number) 
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
   const t = TANK[value - 1]
-  const pct = (value / 5) * 100
 
   const setFromX = (clientX: number) => {
     const el = trackRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
-    const rel = (clientX - r.left) / r.width
-    onChange(Math.min(5, Math.max(1, Math.ceil(rel * 5))))
+    onChange(Math.min(5, Math.max(1, Math.ceil(((clientX - r.left) / r.width) * 5))))
   }
 
+  // Five discrete power cells instead of a liquid bar. Two reasons: a reactor
+  // reads as a reading you're taking, not a slider you're nudging — and the
+  // old version ran a CSS bubble-rise loop plus a flowing gradient forever,
+  // repainting the hero card even when nobody was looking at it. Everything
+  // here is transform/opacity and only moves on interaction.
   return (
     <div>
       <div
         ref={trackRef}
         role="slider"
         aria-label="Energy left in the tank"
-        aria-valuemin={1} aria-valuemax={5} aria-valuenow={value} aria-valuetext={t.label}
+        aria-valuemin={1} aria-valuemax={5} aria-valuenow={value} aria-valuetext={`${t.label} — ${t.desc}`}
         tabIndex={0}
         onKeyDown={e => {
           if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); onChange(Math.max(1, value - 1)) }
           if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); onChange(Math.min(5, value + 1)) }
+          if (e.key === 'Home') { e.preventDefault(); onChange(1) }
+          if (e.key === 'End') { e.preventDefault(); onChange(5) }
         }}
         onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); setFromX(e.clientX) }}
         onPointerMove={e => { if (dragging) setFromX(e.clientX) }}
         onPointerUp={() => setDragging(false)}
         onPointerCancel={() => setDragging(false)}
-        className={`relative h-14 touch-none select-none overflow-hidden rounded-2xl border bg-white/[0.02] outline-none ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        className={`relative flex h-16 touch-none select-none items-center gap-1.5 rounded-2xl border p-2 outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         style={{
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(0,0,0,0.25))',
           borderColor: dragging ? `${t.color}66` : 'var(--edge)',
-          boxShadow: dragging ? `0 0 28px ${t.color}33, inset 0 1px 0 rgba(255,255,255,0.06)` : 'inset 0 1px 0 rgba(255,255,255,0.04)',
+          boxShadow: dragging
+            ? `0 0 30px ${t.color}30, inset 0 1px 0 rgba(255,255,255,0.07)`
+            : 'inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -8px 20px rgba(0,0,0,0.25)',
           transition: 'border-color 0.2s, box-shadow 0.2s',
         }}
       >
-        {/* segment ticks */}
-        {[1, 2, 3, 4].map(i => (
-          <span key={i} className="absolute inset-y-2.5 z-10 w-px bg-white/10" style={{ left: `${i * 20}%` }} />
-        ))}
-        {/* liquid */}
-        <motion.div
-          className="absolute inset-y-0 left-0"
-          animate={{ width: `${pct}%` }}
-          transition={dragging ? { type: 'spring', stiffness: 900, damping: 50 } : { type: 'spring', stiffness: 230, damping: 18 }}
-        >
-          <div className="tank-liquid" style={{ background: `linear-gradient(90deg, ${t.color}26, ${t.color}59 55%, ${t.color}a6)` }} />
-          {/* glowing surface line at the liquid's edge */}
-          <div className="absolute inset-y-1.5 right-0 w-[3px] rounded-full" style={{ background: t.color, filter: `drop-shadow(0 0 8px ${t.color})` }} />
-          {/* bubbles */}
-          {[0, 1, 2, 3, 4].map(i => (
-            <span key={i} className="tank-bubble" style={{ left: `${10 + i * 19}%`, animationDelay: `${i * 0.55}s`, animationDuration: `${2 + (i % 3) * 0.5}s` }} />
-          ))}
-          {/* knob riding the surface */}
-          <motion.div
-            className="absolute right-1 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/30"
-            animate={{ scale: dragging ? 1.2 : 1, rotate: dragging ? [0, -8, 8, 0] : 0 }}
-            transition={{ type: 'spring', stiffness: 500, damping: 22 }}
-            style={{ background: `radial-gradient(circle at 35% 30%, ${t.color}, ${t.color}88)`, boxShadow: `0 0 20px ${t.color}aa, 0 4px 12px rgba(0,0,0,0.45)` }}
-          >
-            <Zap size={15} className="text-white" fill="white" />
-          </motion.div>
-        </motion.div>
-        {/* level word floats in the empty side of the tank */}
+        {TANK.map(lv => {
+          const lit = lv.n <= value
+          return (
+            <motion.div
+              key={lv.n}
+              className="relative h-full flex-1 overflow-hidden rounded-lg"
+              animate={{
+                // The leading cell sits slightly proud — that's what makes the
+                // row read as a level rather than five separate buttons.
+                scaleY: lit ? (lv.n === value ? 1 : 0.86) : 0.62,
+                opacity: lit ? 1 : 0.35,
+              }}
+              transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+              style={{
+                background: lit
+                  ? `linear-gradient(180deg, ${t.color}f2, ${t.color}66)`
+                  : 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))',
+                boxShadow: lit
+                  ? `0 0 14px ${t.color}88, inset 0 1px 0 rgba(255,255,255,0.45)`
+                  : 'inset 0 1px 0 rgba(255,255,255,0.05)',
+              }}
+            >
+              {/* specular strip — turns a flat block into a lit cell */}
+              {lit && (
+                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/3 rounded-t-lg"
+                  style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.4), transparent)' }} />
+              )}
+            </motion.div>
+          )
+        })}
+
+        {/* Reading, in the corner like an instrument. */}
         <AnimatePresence mode="wait">
           <motion.span
             key={t.label}
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.16 }}
-            className={`pointer-events-none absolute top-1/2 z-10 -translate-y-1/2 font-mono text-[11px] font-bold uppercase tracking-[0.2em] ${value >= 4 ? 'left-3.5' : 'right-3.5'}`}
-            style={{ color: t.color, textShadow: `0 0 12px ${t.color}66` }}
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.15 }}
+            className="pointer-events-none absolute -top-0.5 right-2.5 flex items-center gap-1 font-mono text-[10px] font-bold uppercase tracking-[0.16em]"
+            style={{ color: t.color, textShadow: `0 0 10px ${t.color}55` }}
           >
-            {t.label}
+            <Zap size={9} fill="currentColor" />{value}/5
           </motion.span>
         </AnimatePresence>
       </div>
-      {/* tap targets under each segment */}
+
+      {/* Each label is its own tap target — dragging is the shortcut, not the
+          only way in. */}
       <div className="mt-1.5 flex">
         {TANK.map(lv => (
           <button
             key={lv.n} type="button" onClick={() => onChange(lv.n)}
-            className={`flex-1 text-center text-[9.5px] font-medium uppercase tracking-wide transition-colors ${value === lv.n ? 'text-primary' : 'text-muted hover:text-secondary'}`}
+            aria-pressed={value === lv.n}
+            className={`flex-1 rounded text-center text-[9.5px] font-medium uppercase tracking-wide transition-colors focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${value === lv.n ? 'text-primary' : 'text-muted hover:text-secondary'}`}
           >
             {lv.label}
           </button>
@@ -987,5 +1004,68 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
         className="w-full resize-none rounded-xl border border-line bg-white/[0.03] px-3.5 py-2.5 text-sm placeholder:text-muted/70"
       />
     </div>
+  )
+}
+
+
+// A single line at the top of the day telling you where you stand. Free users
+// were never told they were on Free until they hit a wall; Pro users paid and
+// then saw nothing acknowledging it. Both are worth one line.
+function PlanStrip() {
+  const profile = useDent(s => s.profile)
+  const aiLeft = useDent(s => s.aiLeftThisWeek())
+  const state = planState(profile)
+  const left = daysLeft(profile)
+  const ent = entitlementsFor(profile)
+
+  if (state === 'expired') {
+    return (
+      <Link to="/pricing" className="mb-3 flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-400/[0.07] px-3.5 py-2.5 transition-colors hover:border-red-400/50">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-red-400">Plan ended</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-secondary">
+          You&apos;re back on Free limits — nothing you logged is lost.
+        </span>
+        <span className="shrink-0 text-[12px] font-semibold text-accent">Renew →</span>
+      </Link>
+    )
+  }
+
+  if (state === 'grace') {
+    return (
+      <Link to="/pricing" className="mb-3 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/[0.07] px-3.5 py-2.5 transition-colors hover:border-warning/50">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-warning">Renewal due</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-secondary">
+          Pro stays on for {Math.max(0, (left ?? 0) + 3)} more day{Math.max(0, (left ?? 0) + 3) === 1 ? '' : 's'} while you sort the payment.
+        </span>
+        <span className="shrink-0 text-[12px] font-semibold text-accent">Retry →</span>
+      </Link>
+    )
+  }
+
+  if (state === 'active') {
+    return (
+      <div className="mb-3 flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/[0.06] px-3.5 py-2.5">
+        <span className="streak-gradient rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Pro</span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-secondary">
+          Everything&apos;s unlocked — {aiLeft} posts left this week, {ent.chatPerDay} co-pilot messages a day. Go build.
+        </span>
+      </div>
+    )
+  }
+
+  // Free. Say what they have left before they run into it, not after.
+  const low = aiLeft <= 1
+  return (
+    <Link to="/pricing"
+      className={`mb-3 flex items-center gap-2 rounded-xl border px-3.5 py-2.5 transition-colors ${low ? 'border-warning/35 bg-warning/[0.07] hover:border-warning/55' : 'border-line bg-white/[0.03] hover:border-accent/40'}`}>
+      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${low ? 'bg-warning/20 text-warning' : 'bg-white/5 text-muted'}`}>Free</span>
+      <span className="min-w-0 flex-1 truncate text-[12px] text-secondary">
+        {aiLeft === 0
+          ? <>No AI posts left this week — they reset Monday.</>
+          : <><span className="font-semibold text-primary">{aiLeft}</span> of {ent.aiPerWeek} AI posts left this week.</>}
+        <span className="hidden sm:inline"> Pro gives you 100 a month and 30 co-pilot messages a day.</span>
+      </span>
+      <span className="shrink-0 text-[12px] font-semibold text-accent">Upgrade →</span>
+    </Link>
   )
 }

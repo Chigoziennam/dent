@@ -1,15 +1,16 @@
 // ── Plan entitlements — one source of truth for what each tier can do ──
 // The Pricing page sells these limits; this file is what actually enforces
 // them across the app so existing users are held to the plan they're on.
-//   Free    → 2 AI generations / week, 30 manual events / month, GitHub only
-//   Pro     → unlimited AI + events, Raw-notes→Human writer
-//   CEO/team → everything in Pro + Product Hunt & Resume outputs
+//   Free → 5 AI posts/week, 8 co-pilot msgs/day, 30 manual events/month
+//   Pro  → 100 AI posts/month, 30 co-pilot msgs/day, unlimited events,
+//          Raw-notes→Human writer, Resume + Product Hunt outputs
 import type { Profile, ContentPlatform } from './types'
 
 export type Tier = 'free' | 'pro' | 'team'
 
 export const tierOf = (p?: Profile | null): Tier => (p?.tier ?? 'free')
-export const TIER_LABEL: Record<Tier, string> = { free: 'Free', pro: 'Pro', team: 'CEO Mode' }
+// 'team' is a legacy tier — anyone on it keeps Pro access, labelled as Pro.
+export const TIER_LABEL: Record<Tier, string> = { free: 'Free', pro: 'Pro', team: 'Pro' }
 
 export interface Entitlements {
   aiPerWeek: number             // writer generations (free tier resets weekly)
@@ -21,31 +22,45 @@ export interface Entitlements {
 }
 
 // Why these numbers and not "unlimited":
-// Every generation is a real OpenRouter call. Measured cost is ~$0.0147 per
-// writer post (Sonnet, ~2.4k in / 500 out) and ~$0.0016 per co-pilot message
-// (Haiku, after the chat context trim). Unlimited on a $9 plan meant a heavy
-// user cost more than they paid — we lost most on the users least likely to
-// churn. These caps are set so that a user who maxes EVERY day still leaves
-// margin (Pro worst case ≈ $5.18/mo against $9), while sitting far enough
-// above real usage that nobody normal ever sees them. Same shape as Claude's
-// own limits: a ceiling that bounds abuse, not a meter that nags.
-// NOTE: team's worst case is ≈ $17.25/mo — it needs to be priced at $29+.
+// Every generation is a real OpenRouter call. Worst-case measured cost is
+// ~$0.0215 per writer post (Sonnet, 60-ship context cap, max_tokens 700) and
+// ~$0.0029 per co-pilot message (Haiku, after the chat context trim).
+// Unlimited on a $9 plan meant a heavy user cost more than they paid — we
+// lost most on the users least likely to churn. At these caps a user who
+// maxes EVERY day costs ~$4.71/mo against $9 (48% margin), and realistic
+// usage lands nearer $0.94 (~90%). Same shape as Claude's own limits: a
+// ceiling that bounds abuse, not a meter that nags.
+// NOTE: a user's ship count does NOT affect cost — the n8n fetch is capped at
+// 60 ships, so someone with 10,000 events costs the same as someone with 60.
+//
+// ONE paid plan. CEO Mode split the good stuff across two tiers and sold
+// things that were never built (custom domain, API access, team dashboard,
+// priority support). Pro now includes everything that actually exists,
+// including the Resume and Product Hunt outputs CEO Mode used to gate.
+// 'team' stays in the type as a legacy alias so anyone already on it keeps
+// full access — it maps to the same entitlements as pro.
 export const ENTITLEMENTS: Record<Tier, Entitlements> = {
-  free: { aiPerWeek: 7,   aiPerMonth: 28,  chatPerDay: 15,  manualEventsPerMonth: 30,       humanWriter: false, proPlatforms: false },
-  pro:  { aiPerWeek: 60,  aiPerMonth: 150, chatPerDay: 60,  manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: false },
-  team: { aiPerWeek: 200, aiPerMonth: 500, chatPerDay: 200, manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: true  },
+  // Free is a real taste, not a trial: 5 posts a week is enough to feel the
+  // writer and build a streak. Chat is the cheap part, so it stays usable.
+  free: { aiPerWeek: 5,   aiPerMonth: 20,  chatPerDay: 8,   manualEventsPerMonth: 30,       humanWriter: false, proPlatforms: false },
+  // Pro sized like Claude's limits: comfortably above what a daily builder
+  // uses (3-4 posts and a handful of co-pilot turns), low enough that the
+  // worst case still clears ~60% margin at $12.
+  pro:  { aiPerWeek: 35,  aiPerMonth: 100, chatPerDay: 30,  manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: true },
+  team: { aiPerWeek: 35,  aiPerMonth: 100, chatPerDay: 30,  manualEventsPerMonth: Infinity, humanWriter: true,  proPlatforms: true },
 }
 
 export const entitlementsFor = (p?: Profile | null): Entitlements => ENTITLEMENTS[tierOf(p)]
 
-// Platforms that require CEO Mode (team). Everything else is open.
+// Platforms that require a paid plan. Resume and Product Hunt used to be
+// CEO-Mode-only; with one paid tier they belong to Pro.
 export const PRO_PLATFORMS: ContentPlatform[] = ['producthunt', 'resume']
 export const platformAllowed = (platform: ContentPlatform, p?: Profile | null): boolean =>
   !PRO_PLATFORMS.includes(platform) || entitlementsFor(p).proPlatforms
 
 // The minimum tier that unlocks a platform — for upgrade copy.
 export const platformTier = (platform: ContentPlatform): Tier =>
-  PRO_PLATFORMS.includes(platform) ? 'team' : 'free'
+  PRO_PLATFORMS.includes(platform) ? 'pro' : 'free'
 
 // Monday-anchored week key (weekly AI reset) and month key (event cap).
 export function weekKey(d = new Date()): string {

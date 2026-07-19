@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, ArrowLeft, Crown, X, ShieldCheck } from 'lucide-react'
+import { Check, ArrowLeft, X, ShieldCheck } from 'lucide-react'
 import { SpaceBackdrop, Logo } from '../components/ui'
 import { useDent } from '../lib/store'
 import { track } from '../lib/telemetry'
@@ -14,7 +14,6 @@ type Currency = 'NGN' | 'USD'
 const PRICES: Record<string, Record<Currency, { m: number; y: number }>> = {
   Free: { NGN: { m: 0, y: 0 }, USD: { m: 0, y: 0 } },
   Pro: { NGN: { m: 5000, y: 4200 }, USD: { m: 9, y: 7 } },
-  'CEO Mode': { NGN: { m: 10000, y: 8300 }, USD: { m: 19, y: 15 } },
 }
 const SYMBOL: Record<Currency, string> = { NGN: '₦', USD: '$' }
 
@@ -42,15 +41,22 @@ function loadPaystack(): Promise<void> {
   return paystackLoading
 }
 
+// One free tier, one paid tier. CEO Mode is gone: it split working features
+// across two prices and advertised four that were never built (custom domain,
+// API access, team dashboard, priority support). Everything listed below is
+// shipped and testable today — if it is not in the app, it is not on this page.
+// Limits mirror ENTITLEMENTS in src/lib/plan.ts and are enforced server-side
+// in the n8n prompt node, so they are stated honestly rather than as "unlimited".
 const TIERS = [
   {
     name: 'Free',
     price: { m: 0, y: 0 },
     tag: 'For the first ship',
     features: [
+      '5 AI posts / week',
+      '8 co-pilot messages / day',
       '30 events / month',
-      '1 integration (GitHub)',
-      '7 AI generations / week',
+      'GitHub sync',
       'Public profile & changelog',
       'Streaks & achievements',
     ],
@@ -62,31 +68,16 @@ const TIERS = [
     price: { m: 9, y: 7 },
     tag: 'For the daily shipper',
     features: [
-      'Unlimited events & integrations',
-      'Unlimited AI generations',
+      '100 AI posts / month',
+      '30 co-pilot messages / day',
+      'Unlimited events & GitHub sync',
       'Raw notes → Human post writer',
-      'Weekly digest emails',
-      'Advanced analytics',
-      'Custom domain for your profile',
+      'Fusion mode — your words, sharpened',
+      'Resume & Product Hunt outputs',
+      'Analytics and scoped exports',
     ],
     cta: 'Go Pro',
     highlight: true,
-  },
-  {
-    name: 'CEO Mode',
-    price: { m: 19, y: 15 },
-    tag: 'For the builder becoming a founder',
-    features: [
-      'Everything in Pro',
-      'Resume Builder — ships become bullet points',
-      'Product Hunt launch kit',
-      'Team dashboard & shared changelog',
-      'API access',
-      'Priority support',
-    ],
-    cta: 'Run the company',
-    highlight: false,
-    crown: true,
   },
 ]
 
@@ -158,7 +149,8 @@ export default function Pricing() {
       metadata: { tier: confirm.tier, cycle: confirm.cycle, priced_in: confirm.currency },
       onSuccess: (tx: { reference?: string }) => {
         // Activate EXACTLY the plan they paid for, and sync the tier to cloud.
-        updateProfile({ tier: confirm.tier === 'CEO Mode' ? 'team' : 'pro' })
+        // One paid plan now, so every successful checkout lands on 'pro'.
+        updateProfile({ tier: 'pro' })
         recordPayment({ email, amountMinor, currency: 'NGN', tier: confirm.tier, cycle: confirm.cycle, reference: tx?.reference })
         track('payment_success', { tier: confirm.tier, cycle: confirm.cycle, currency: confirm.currency })
         setPaying(false)
@@ -194,7 +186,7 @@ export default function Pricing() {
           className="text-center text-4xl font-bold tracking-tight md:text-5xl"
         >
           Every builder ships free.
-          <br /><span className="text-gradient">CEOs ship louder.</span>
+          <br /><span className="text-gradient">Daily shippers go Pro.</span>
         </motion.h1>
         <p className="mx-auto mt-4 max-w-md text-center text-secondary">
           Start free forever. Upgrade when your audience — or your ambition — outgrows the plan.
@@ -253,7 +245,6 @@ export default function Pricing() {
               )}
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold">{t.name}</h3>
-                {t.crown && <Crown size={15} className="text-warning" />}
               </div>
               <p className="mt-0.5 text-xs text-muted">{t.tag}</p>
               <div className="mt-4 flex items-baseline gap-1">
@@ -291,9 +282,23 @@ export default function Pricing() {
           ))}
         </motion.div>
 
+        {/* Say what actually happens. The old copy promised "every feature
+            unlocked for everyone during the beta", which stopped being true
+            the moment limits were enforced — and limits users discover by
+            hitting them are how you lose trust and get chargebacks. */}
         <p className="mt-10 text-center text-xs text-muted">
-          Launch pricing — locked in forever for early builders. Every feature is unlocked for everyone during the beta.
-          {currency === 'NGN' && <span className="mt-1 block">Payments in naira via Paystack — no dollar cards needed.</span>}
+          Launch pricing — locked in forever for early builders. Limits reset automatically:
+          co-pilot messages daily, AI posts weekly and monthly.
+          {currency === 'NGN' ? (
+            <span className="mt-1 block">Payments in naira via Paystack — no dollar cards needed.</span>
+          ) : (
+            <span className="mt-1 block">
+              Paying from the US, UK, EU or anywhere outside Nigeria? Any Visa, Mastercard or Amex works.
+              You are charged the naira equivalent of ${PRICES.Pro.USD.m}/mo through Paystack and your bank
+              converts automatically — the dollar amount above is what lands on your statement.
+              Some US banks add a foreign-transaction fee of 1-3%.
+            </span>
+          )}
         </p>
 
         {/* Confirm the EXACT amount (₦ and $) before anything is charged */}

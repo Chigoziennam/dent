@@ -43,9 +43,9 @@ const sourceEventIds = dbShips.map(e => e.id).filter(Boolean);
 // from the AI — one guard, two reasons.
 // ------------------------------------------------------------
 const CAPS = {
-  free: { writesWeek: 7,   writesMonth: 28,  chatDay: 15  },
-  pro:  { writesWeek: 60,  writesMonth: 150, chatDay: 60  },
-  team: { writesWeek: 200, writesMonth: 500, chatDay: 200 },
+  free: { writesWeek: 5,  writesMonth: 20,  chatDay: 8  },
+  pro:  { writesWeek: 35, writesMonth: 100, chatDay: 30 },
+  team: { writesWeek: 35, writesMonth: 100, chatDay: 30 }, // legacy alias of pro
 };
 
 const profileRow = (() => {

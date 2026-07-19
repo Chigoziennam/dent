@@ -20,7 +20,7 @@ const rowsOf = (node) => {
 
 const dbShips = rowsOf('Fetch ships').map(e => ({
   id: e.id, category: e.category, title: e.title,
-  date: e.event_date, detail: (e.description ?? '').slice(0, 240), repo: e.repo
+  date: e.event_date, detail: (e.description ?? '').slice(0, b.detailLen ?? 240), repo: e.repo
 }));
 const dbLogs = rowsOf('Fetch daily logs').map(l => ({
   date: l.log_date, built: l.what_i_built, learned: l.what_i_learned,

@@ -32,24 +32,37 @@ export function Copilot() {
     return () => window.removeEventListener('copilot:open', open)
   }, [])
 
-  // AUTOMATED: the co-pilot speaks first. On first open it reads the log
-  // and delivers a briefing — no question needed. Runs once per session.
+  // The co-pilot answers when spoken to — opening the panel costs nothing.
+  // It used to fire a briefing automatically on first open, which meant every
+  // open was a real AI call even if the user never typed. On a plan with
+  // unlimited chat that is a bill with no intent behind it, and it made the
+  // panel feel like it was doing something you didn't ask for.
+  // The greeting below is local text; "Brief me" spends a call only if tapped.
   const briefed = useRef(false)
   useEffect(() => {
     if (!open || briefed.current || msgs.length > 0) return
     briefed.current = true
+    setMsgs([{
+      role: 'copilot',
+      text: `Hey${profile.displayName ? ` ${profile.displayName.split(' ')[0]}` : ''} — I've read your log. Ask me anything, or tap "Brief me" for where ${profile.projectName || 'the project'} stands.`,
+    }])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  // Explicit, user-initiated briefing. Same call as before, now on intent.
+  const briefMe = async () => {
+    if (thinking) return
+    setMsgs(m => [...m, { role: 'user', text: 'Brief me' }])
     setThinking(true)
-    copilotBriefing({
+    const text = await copilotBriefing({
       events, dailyLogs,
       streak: profile.streakCurrent,
       projectName: profile.projectName,
       displayName: profile.displayName,
-    }).then(text => {
-      setMsgs(m => (m.length === 0 ? [{ role: 'copilot', text }] : m))
-      setThinking(false)
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+    setMsgs(m => [...m, { role: 'copilot', text }])
+    setThinking(false)
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -175,9 +188,15 @@ export function Copilot() {
                   {msgs.length === 0 && <span className="ml-1 text-[10.5px] text-muted">reading your log…</span>}
                 </div>
               )}
-              {/* quick prompts stay visible under the opening briefing */}
+              {/* quick prompts stay visible under the opening greeting.
+                  "Brief me" leads because it replaces what used to happen
+                  automatically — same briefing, now only when asked for. */}
               {!thinking && msgs.length <= 1 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
+                  <button onClick={briefMe}
+                    className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] font-medium text-accent transition-colors hover:border-accent">
+                    Brief me
+                  </button>
                   {QUICK.map(qk => (
                     <button key={qk} onClick={() => ask(qk)}
                       className="rounded-full border border-line px-2.5 py-1.5 text-[11px] text-secondary transition-colors hover:border-accent/50 hover:text-accent">

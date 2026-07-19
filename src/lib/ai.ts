@@ -1,4 +1,4 @@
-import type { ShipEvent, DailyLog, ContentPlatform, Tone, EventCategory } from './types'
+import type { ShipEvent, DailyLog, ContentPlatform, Tone, EventCategory, CopilotVibe } from './types'
 import { CATEGORY_META } from './types'
 
 // Works in two modes:
@@ -501,6 +501,8 @@ export interface CopilotContext {
   streak: number
   projectName: string
   displayName: string
+  // How the companion should talk to them. Defaults to 'mate' server-side.
+  copilotVibe?: CopilotVibe
 }
 
 // Which brain is answering? The UI shows this so "automated" is never a mystery.
@@ -513,6 +515,7 @@ export function aiMode(): 'n8n' | 'direct' | 'local' {
 async function copilotRemote(question: string, ctx: CopilotContext): Promise<string | null> {
   const alive = await callN8n('chat', {
     question,
+    copilotVibe: ctx.copilotVibe,
     projectName: ctx.projectName,
     streak: ctx.streak,
     events: ctx.events.slice(0, 60).map(e => ({ category: e.category, title: e.title, date: e.eventDate, detail: e.description?.slice(0, 240) })),

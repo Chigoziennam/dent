@@ -12,6 +12,16 @@ export type ContentPlatform =
   | 'threads' | 'devto' | 'producthunt' | 'resume'
 export type Tone = 'founder' | 'technical' | 'storytelling' | 'hype' | 'mentor' | 'unfiltered'
 
+// How the co-pilot talks TO you. Separate from Tone, which is how the writer
+// talks to your audience — you might want dry posts and a warm companion.
+export type CopilotVibe = 'mate' | 'coach' | 'dry' | 'quiet'
+export const VIBE_META: Record<CopilotVibe, { label: string; hint: string }> = {
+  mate:  { label: 'Mate',  hint: 'jokes with you, celebrates loudly' },
+  coach: { label: 'Coach', hint: 'warm but pushes you to the next move' },
+  dry:   { label: 'Dry',   hint: 'deadpan, funny in a flat way' },
+  quiet: { label: 'Quiet', hint: 'short and factual, no small talk' },
+}
+
 export const TONE_META: Record<Tone, { label: string; hint: string }> = {
   founder: { label: 'Founder', hint: 'confident, casual, first-person' },
   technical: { label: 'Technical', hint: 'precise, architecture-first' },
@@ -94,6 +104,8 @@ export interface Profile {
   github: string
   tone: Tone
   theme?: 'dark' | 'light'
+  // How the co-pilot speaks to you. Defaults to 'mate'.
+  copilotVibe?: CopilotVibe
   tier?: 'free' | 'pro' | 'team'
   // What they bought is `tier`; whether it still counts is `planExpiresAt`.
   // Without this an expired plan never lapses — see plan.ts planState().

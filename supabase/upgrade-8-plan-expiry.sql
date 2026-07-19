@@ -77,3 +77,11 @@ select
 from profiles p
 left join v_ai_usage_now u on u.user_id = p.id
 order by u.last_call desc nulls last;
+
+-- ------------------------------------------------------------
+-- Co-pilot personality — how the companion talks TO the builder.
+-- Separate from default_tone, which is how the writer talks to their
+-- audience: plenty of people want dry posts and a companion that jokes back.
+-- ------------------------------------------------------------
+alter table profiles add column if not exists copilot_vibe text
+  check (copilot_vibe in ('mate','coach','dry','quiet'));

@@ -53,6 +53,10 @@ interface DentState {
   aiUsed: number // AI generations used, lifetime (display)
   aiWeek: string // Monday-anchored week key the count below belongs to
   aiWeekCount: number // AI generations used this week (free-tier gate)
+  // Co-pilot has its OWN budget so a conversation never eats writing credits.
+  // Keyed by date so it resets at midnight without a scheduled job.
+  chatDay: string
+  chatDayCount: number
 
   login: () => void
   realLogin: (user: CloudUser) => Promise<void>
@@ -71,6 +75,8 @@ interface DentState {
   // Plan gates — return false when the current tier's limit is reached.
   tryUseAI: () => boolean
   aiLeftThisWeek: () => number
+  tryUseChat: () => boolean
+  chatLeftToday: () => number
   manualEventsThisMonth: () => number
 }
 
@@ -176,6 +182,8 @@ export const useDent = create<DentState>()(
       aiUsed: 0,
       aiWeek: weekKey(),
       aiWeekCount: 0,
+      chatDay: new Date().toISOString().slice(0, 10),
+      chatDayCount: 0,
 
       // Demo door: keeps the seeded showcase data
       login: () => { track('demo_login'); set({ loggedIn: true }) },
@@ -266,6 +274,7 @@ export const useDent = create<DentState>()(
                 planExpiresAt: (cp.plan_expires_at as string) ?? profile.planExpiresAt,
                 planStartedAt: (cp.plan_started_at as string) ?? profile.planStartedAt,
                 planCycle: (cp.plan_cycle as Profile['planCycle']) ?? profile.planCycle,
+                copilotVibe: (cp.copilot_vibe as Profile['copilotVibe']) ?? profile.copilotVibe,
                 // The look and voice they chose — a new browser must show THEM.
                 // `||` (not `??`) so an empty saved avatar still falls back.
                 avatar: (cp.avatar as string) ?? profile.avatar,
@@ -480,6 +489,25 @@ export const useDent = create<DentState>()(
         const s = get()
         const used = s.aiWeek === weekKey() ? s.aiWeekCount : 0
         return Math.max(0, entitlementsFor(s.profile).aiPerWeek - used)
+      },
+
+      // The co-pilot's own daily budget. n8n enforces the real ceiling, but
+      // counting here is what lets the UI show "6 of 8 left" BEFORE someone
+      // hits a wall — a limit you discover by slamming into it reads as a bug.
+      tryUseChat: () => {
+        const s = get()
+        const today = new Date().toISOString().slice(0, 10)
+        const used = s.chatDay === today ? s.chatDayCount : 0
+        if (used >= entitlementsFor(s.profile).chatPerDay) return false
+        track('copilot_message')
+        set({ chatDay: today, chatDayCount: used + 1 })
+        return true
+      },
+      chatLeftToday: () => {
+        const s = get()
+        const today = new Date().toISOString().slice(0, 10)
+        const used = s.chatDay === today ? s.chatDayCount : 0
+        return Math.max(0, entitlementsFor(s.profile).chatPerDay - used)
       },
       manualEventsThisMonth: () => {
         const mk = monthKey()

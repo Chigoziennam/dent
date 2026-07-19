@@ -11,6 +11,9 @@ const QUICK = ['How\'s my week?', 'When did I fix auth?', 'Motivate me', 'What s
 
 export function Copilot() {
   const { events, dailyLogs, profile } = useDent()
+  const tryUseChat = useDent(s => s.tryUseChat)
+  const chatLeft = useDent(s => s.chatLeftToday())
+  const capMessage = `That's all your co-pilot messages for today — they reset at midnight. ${(profile.tier ?? 'free') === 'free' ? 'Pro raises it to 30 a day.' : ''}`.trim()
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -52,6 +55,7 @@ export function Copilot() {
   // Explicit, user-initiated briefing. Same call as before, now on intent.
   const briefMe = async () => {
     if (thinking) return
+    if (!tryUseChat()) return setMsgs(m => [...m, { role: 'copilot', text: capMessage }])
     setMsgs(m => [...m, { role: 'user', text: 'Brief me' }])
     setThinking(true)
     const text = await copilotBriefing({
@@ -59,6 +63,7 @@ export function Copilot() {
       streak: profile.streakCurrent,
       projectName: profile.projectName,
       displayName: profile.displayName,
+      copilotVibe: profile.copilotVibe,
     })
     setMsgs(m => [...m, { role: 'copilot', text }])
     setThinking(false)
@@ -73,12 +78,16 @@ export function Copilot() {
     if (!question || thinking) return
     setInput('')
     setMsgs(m => [...m, { role: 'user', text: question }])
+    // Refuse locally at the cap so the user sees WHY instead of a silent
+    // failure. n8n enforces the real ceiling; this is the friendly copy.
+    if (!tryUseChat()) return setMsgs(m => [...m, { role: 'copilot', text: capMessage }])
     setThinking(true)
     const text = await copilotAnswer(question, {
       events, dailyLogs,
       streak: profile.streakCurrent,
       projectName: profile.projectName,
       displayName: profile.displayName,
+      copilotVibe: profile.copilotVibe,
     })
     setMsgs(m => [...m, { role: 'copilot', text }])
     setThinking(false)
@@ -142,6 +151,11 @@ export function Copilot() {
                     {aiMode() === 'local'
                       ? `local brain · knows all ${events.length} ships`
                       : `live AI · has read all ${events.length} of your ships`}
+                  </div>
+                  {/* The budget was invisible before — you found out by hitting
+                      it. Showing it turns a wall into a countdown. */}
+                  <div className={`text-[10px] ${chatLeft === 0 ? 'text-warning' : 'text-muted'}`}>
+                    {chatLeft === 0 ? 'no messages left today' : `${chatLeft} message${chatLeft === 1 ? '' : 's'} left today`}
                   </div>
                 </div>
                 <span

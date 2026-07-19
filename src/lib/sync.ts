@@ -201,6 +201,7 @@ export function pushProfile(userId: string, p: ProfileSync) {
     ...(p.twitter !== undefined ? { twitter_handle: p.twitter } : {}),
     ...(p.github !== undefined ? { github_username: p.github } : {}),
     ...(p.tone ? { default_tone: p.tone } : {}),
+    ...(p.copilotVibe ? { copilot_vibe: p.copilotVibe } : {}),
     ...(p.theme ? { theme: p.theme } : {}),
     // Progress — base-schema columns, so these are safe even without upgrades.
     ...(p.builderScore !== undefined ? { builder_score: p.builderScore } : {}),

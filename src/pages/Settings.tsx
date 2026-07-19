@@ -8,7 +8,7 @@ import { pendingSyncCount, syncHealth } from '../lib/sync'
 import { Link } from 'react-router-dom'
 import { useDent } from '../lib/store'
 import { entitlementsFor, tierOf, planState, daysLeft } from '../lib/plan'
-import { TONE_META, type Tone } from '../lib/types'
+import { TONE_META, VIBE_META, type Tone, type CopilotVibe } from '../lib/types'
 import { Page, GlassCard, SectionTitle, AnimatedAvatar } from '../components/ui'
 
 // The real prices, in both currencies, so the number here matches the number
@@ -21,6 +21,7 @@ const PLAN_OPTIONS = [
 export default function Settings() {
   const { profile, updateProfile, logout } = useDent()
   const aiLeft = useDent(s => s.aiLeftThisWeek())
+  const chatLeft = useDent(s => s.chatLeftToday())
   const ent = entitlementsFor(profile)
   // 'free' | 'active' | 'grace' | 'expired' — drives the whole plan card.
   const state = planState(profile)
@@ -165,6 +166,21 @@ export default function Settings() {
             </button>
           ))}
         </div>
+        {/* The writing voice above is how the WRITER talks to your audience.
+            This is how the CO-PILOT talks to you — different jobs, and plenty
+            of people want dry posts but a companion that jokes back. */}
+        <div className="mt-4 text-xs font-medium text-secondary">Co-pilot personality</div>
+        <p className="mt-0.5 text-[11px] text-muted">How your companion talks to you. It always stays on your work.</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(Object.keys(VIBE_META) as CopilotVibe[]).map(v => (
+            <button key={v} onClick={() => { setForm({ ...form, copilotVibe: v }); updateProfile({ copilotVibe: v }) }} title={VIBE_META[v].hint}
+              className={`rounded-full border px-3.5 py-1.5 text-[12.5px] font-medium transition-colors ${(form.copilotVibe ?? 'mate') === v ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted'}`}>
+              {VIBE_META[v].label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] text-muted">{VIBE_META[form.copilotVibe ?? 'mate'].hint}</p>
+
         <div className="mt-4 text-xs font-medium text-secondary">Theme</div>
         <div className="mt-2 flex gap-2">
           {(['dark', 'light'] as const).map(th => (
@@ -220,7 +236,7 @@ export default function Settings() {
       <div className="space-y-2.5">
         {([
           { label: 'AI posts this week', used: ent.aiPerWeek - aiLeft, cap: ent.aiPerWeek },
-          { label: 'Co-pilot messages today', used: null, cap: ent.chatPerDay },
+          { label: 'Co-pilot messages today', used: ent.chatPerDay - chatLeft, cap: ent.chatPerDay },
         ] as const).map(row => (
           <div key={row.label}>
             <div className="flex items-baseline justify-between">

@@ -33,6 +33,11 @@ export default function Write() {
   const { events, dailyLogs, profile, saveContent, content } = useDent()
   const [mode, setMode] = useState<'ships' | 'manual' | 'fusion'>('ships')
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  // Where the ships in the picker came from. GitHub commits arrive in bulk
+  // and are newest-first, so a hand-logged milestone — the revenue note, the
+  // launch, the customer call — used to get pushed past the cut and become
+  // unpickable. These are usually the ships most worth writing about.
+  const [source, setSource] = useState<'all' | 'manual' | 'github'>('all')
   const [state, setState] = useState('')
   const [opened, setOpened] = useState(false)
   const [platform, setPlatform] = useState<ContentPlatform>('twitter')
@@ -88,6 +93,17 @@ export default function Write() {
     return next
   })
   const activeEvents = useMemo(() => rangeEvents.filter(e => !excluded.has(e.id)), [rangeEvents, excluded])
+
+  // What the Fusion picker offers. Manual ships sort FIRST, then the cap
+  // applies — otherwise a busy commit week buries the milestone you actually
+  // wanted to post about. Raised 20 -> 40 as well; the list scrolls.
+  const pickable = useMemo(() => {
+    const filtered = rangeEvents.filter(e =>
+      source === 'all' ? true : source === 'github' ? e.source === 'github' : e.source !== 'github')
+    const manual = filtered.filter(e => e.source !== 'github')
+    const github = filtered.filter(e => e.source === 'github')
+    return [...manual, ...github].slice(0, 40)
+  }, [rangeEvents, source])
   const rangeLogs = useMemo(() => dailyLogs.filter(l => l.logDate >= cutoff), [dailyLogs, cutoff])
 
   const pickPlatform = (p: { key: ContentPlatform; pro?: boolean }) => {
@@ -244,8 +260,23 @@ export default function Write() {
               <p className="mb-2.5 text-xs leading-relaxed text-muted">
                 Tap the events that belong in this post — they become the facts.
               </p>
+              <div className="mb-2 flex gap-1.5">
+                {([
+                  { k: 'all' as const, label: 'Everything' },
+                  { k: 'manual' as const, label: 'Logged by me' },
+                  { k: 'github' as const, label: 'From GitHub' },
+                ]).map(o => (
+                  <button key={o.k} onClick={() => setSource(o.k)}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${source === o.k ? 'border-accent/60 bg-accent/10 text-accent' : 'border-line text-muted hover:text-secondary'}`}>
+                    {o.label}
+                    <span className="ml-1 font-mono opacity-60">
+                      {o.k === 'all' ? rangeEvents.length : rangeEvents.filter(e => o.k === 'github' ? e.source === 'github' : e.source !== 'github').length}
+                    </span>
+                  </button>
+                ))}
+              </div>
               <div className="no-scrollbar max-h-56 space-y-1.5 overflow-y-auto pr-1">
-                {rangeEvents.slice(0, 20).map(e => {
+                {pickable.map(e => {
                   const on = picked.has(e.id)
                   return (
                     <button key={e.id} onClick={() => togglePick(e.id)}
@@ -255,6 +286,9 @@ export default function Write() {
                       </span>
                       <CategoryPill category={e.category} />
                       <span className="truncate text-xs text-secondary">{e.title}</span>
+                      <span className="ml-auto shrink-0 font-mono text-[9px] uppercase tracking-wide text-muted">
+                        {e.source === 'github' ? (repoOf(e) ?? 'github') : 'yours'}
+                      </span>
                     </button>
                   )
                 })}

@@ -128,41 +128,99 @@ export function AnimatedAvatar({ src, fallback, hue = 245, size = 40, pulse = tr
 // ── AI Core: the co-pilot's face — a living reactor, not an emoji ──
 // Rotating orbit ring + counter-rotating dashes + pulsing plasma heart.
 export function AICore({ size = 22, color = '#fff' }: { size?: number; color?: string }) {
+  // A small piece of deep space rather than a glowing dot: a nebula core with
+  // a hot centre, three orbits sitting at different inclinations so the thing
+  // reads as volumetric, satellites riding two of them, and a sparse star
+  // field that drifts. Everything is SVG + transforms, so it composites on
+  // the GPU and costs nothing to keep running.
+  const uid = 'ai'
   return (
-    <motion.svg
-      viewBox="0 0 48 48" width={size} height={size} aria-hidden
-      initial={false}
-    >
+    <motion.svg viewBox="0 0 48 48" width={size} height={size} aria-hidden initial={false}>
       <defs>
-        <radialGradient id="aiHeart" cx="42%" cy="38%" r="65%">
-          <stop offset="0%" stopColor="#e0e7ff" />
-          <stop offset="45%" stopColor="#a5b4fc" />
-          <stop offset="100%" stopColor="#6366f1" />
+        {/* Hot white centre bleeding through indigo into deep violet. */}
+        <radialGradient id={`${uid}Core`} cx="40%" cy="34%" r="70%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="28%" stopColor="#dbeafe" />
+          <stop offset="58%" stopColor="#818cf8" />
+          <stop offset="100%" stopColor="#4c1d95" />
         </radialGradient>
+        {/* The haze the core sits in — what makes it feel like depth. */}
+        <radialGradient id={`${uid}Neb`} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.55" />
+          <stop offset="55%" stopColor="#6366f1" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#312e81" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id={`${uid}Ring`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.05" />
+          <stop offset="45%" stopColor={color} stopOpacity="0.85" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.05" />
+        </linearGradient>
       </defs>
-      {/* outer orbit — slow spin */}
-      <motion.g
-        animate={{ rotate: 360 }}
-        transition={{ duration: 9, repeat: Infinity, ease: 'linear' }}
-        style={{ originX: '24px', originY: '24px' }}
-      >
-        <ellipse cx="24" cy="24" rx="20" ry="9.5" fill="none" stroke={color} strokeOpacity="0.5" strokeWidth="1.6" />
-        <circle cx="44" cy="24" r="2.6" fill={color} />
-      </motion.g>
-      {/* inner dashes — counter-spin */}
+
+      {/* Nebula haze, breathing out of phase with the core so it never pulses
+          as one flat unit. */}
       <motion.circle
-        cx="24" cy="24" r="13.5" fill="none" stroke={color} strokeOpacity="0.65"
-        strokeWidth="1.6" strokeDasharray="5 7" strokeLinecap="round"
-        animate={{ rotate: -360 }}
-        transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+        cx="24" cy="24" r="23" fill={`url(#${uid}Neb)`}
+        animate={{ opacity: [0.55, 0.9, 0.55], scale: [1, 1.06, 1] }}
+        transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
         style={{ originX: '24px', originY: '24px' }}
       />
-      {/* plasma heart — breathing */}
+
+      {/* Star field — a few points at fixed spots, twinkling on their own
+          clocks so the pattern never looks like a loop. */}
+      {[[7, 11, 0.9], [40, 15, 0.7], [12, 38, 0.75], [38, 36, 0.85], [24, 5, 0.6], [5, 25, 0.65]].map(([cx, cy, r], i) => (
+        <motion.circle
+          key={i} cx={cx} cy={cy} r={r} fill="#e0e7ff"
+          animate={{ opacity: [0.15, 0.85, 0.15] }}
+          transition={{ duration: 2.4 + i * 0.7, repeat: Infinity, ease: 'easeInOut', delay: i * 0.45 }}
+        />
+      ))}
+
+      {/* Three inclined orbits. Different tilts + directions is what sells
+          three dimensions in a 48px box. */}
+      <motion.g
+        animate={{ rotate: 360 }} transition={{ duration: 14, repeat: Infinity, ease: 'linear' }}
+        style={{ originX: '24px', originY: '24px' }}
+      >
+        <ellipse cx="24" cy="24" rx="21" ry="8" fill="none" stroke={`url(#${uid}Ring)`} strokeWidth="1.4" transform="rotate(-18 24 24)" />
+        <circle cx="45" cy="24" r="2.2" fill="#c7d2fe" transform="rotate(-18 24 24)"
+          style={{ filter: 'drop-shadow(0 0 4px rgba(199,210,254,0.95))' }} />
+      </motion.g>
+
+      <motion.g
+        animate={{ rotate: -360 }} transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
+        style={{ originX: '24px', originY: '24px' }}
+      >
+        <ellipse cx="24" cy="24" rx="17" ry="6.5" fill="none" stroke={`url(#${uid}Ring)`} strokeWidth="1.2" transform="rotate(52 24 24)" />
+        <circle cx="41" cy="24" r="1.7" fill="#a5b4fc" transform="rotate(52 24 24)"
+          style={{ filter: 'drop-shadow(0 0 3px rgba(165,180,252,0.9))' }} />
+      </motion.g>
+
+      {/* Dashed inner ring — the "scanning" read. */}
       <motion.circle
-        cx="24" cy="24" r="7.5" fill="url(#aiHeart)"
-        animate={{ scale: [1, 1.18, 1], opacity: [0.9, 1, 0.9] }}
-        transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ originX: '24px', originY: '24px', filter: 'drop-shadow(0 0 6px rgba(165,180,252,0.9))' }}
+        cx="24" cy="24" r="12.5" fill="none" stroke={color} strokeOpacity="0.45"
+        strokeWidth="1.1" strokeDasharray="3 6" strokeLinecap="round"
+        animate={{ rotate: 360 }} transition={{ duration: 7, repeat: Infinity, ease: 'linear' }}
+        style={{ originX: '24px', originY: '24px' }}
+      />
+
+      {/* Corona, then the core itself. */}
+      <motion.circle
+        cx="24" cy="24" r="9.5" fill="none" stroke="#a5b4fc" strokeOpacity="0.35" strokeWidth="0.8"
+        animate={{ r: [8.5, 11.5, 8.5], opacity: [0.5, 0, 0.5] }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeOut' }}
+      />
+      <motion.circle
+        cx="24" cy="24" r="7" fill={`url(#${uid}Core)`}
+        animate={{ scale: [1, 1.13, 1] }}
+        transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ originX: '24px', originY: '24px', filter: 'drop-shadow(0 0 7px rgba(147,161,252,0.95))' }}
+      />
+      {/* Offset specular highlight — reads as a lit sphere, not a flat disc. */}
+      <motion.circle
+        cx="21.6" cy="21.6" r="2" fill="#ffffff"
+        animate={{ opacity: [0.75, 1, 0.75] }}
+        transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
       />
     </motion.svg>
   )

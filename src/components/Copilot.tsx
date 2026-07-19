@@ -103,16 +103,31 @@ export function Copilot() {
         whileTap={{ scale: 0.92 }}
         animate={{ y: [0, -4, 0] }}
         transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-        className="fixed bottom-24 right-4 z-40 flex h-13 w-13 items-center justify-center rounded-2xl md:bottom-6 md:right-6"
+        className="fixed bottom-24 right-4 z-40 flex h-13 w-13 items-center justify-center overflow-hidden rounded-2xl md:bottom-6 md:right-6"
         style={{
           height: 52, width: 52,
-          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-          boxShadow: '0 0 32px rgba(99,102,241,0.55), 0 8px 24px rgba(0,0,0,0.4)',
+          // Deep space, not a flat purple chip: a near-black well with an
+          // off-centre indigo glow behind the core, a lit rim, and light
+          // thrown downward so it sits ON the page instead of floating over it.
+          background:
+            'radial-gradient(120% 120% at 30% 20%, rgba(129,140,248,0.55) 0%, rgba(76,29,149,0.75) 42%, #0b0a1f 100%)',
+          border: '1px solid rgba(165,180,252,0.35)',
+          boxShadow:
+            '0 0 0 1px rgba(99,102,241,0.25), 0 0 28px rgba(99,102,241,0.5), 0 0 60px rgba(139,92,246,0.28), 0 10px 28px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.18)',
         }}
         aria-label="Open co-pilot"
       >
-        <motion.span animate={{ rotate: open ? 90 : 0 }} className="flex items-center justify-center">
-          {open ? <X size={20} className="text-white" /> : <AICore size={30} />}
+        {!open && (
+          <motion.span
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ background: 'linear-gradient(115deg, transparent 35%, rgba(196,181,253,0.22) 50%, transparent 65%)' }}
+            animate={{ x: ['-120%', '120%'] }}
+            transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', repeatDelay: 2.5 }}
+          />
+        )}
+        <motion.span animate={{ rotate: open ? 90 : 0 }} className="relative flex items-center justify-center">
+          {open ? <X size={20} className="text-white" /> : <AICore size={32} />}
         </motion.span>
         {/* attention ping until the first briefing is read */}
         {!open && !briefed.current && (

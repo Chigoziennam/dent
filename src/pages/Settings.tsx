@@ -14,8 +14,8 @@ import { Page, GlassCard, SectionTitle, AnimatedAvatar } from '../components/ui'
 // The real prices, in both currencies, so the number here matches the number
 // at the Paystack popup. Mirrors PRICES in src/pages/Pricing.tsx.
 const PLAN_OPTIONS = [
-  { cycle: 'monthly' as const, label: 'Pro · monthly', ngn: 5000, usd: 9, note: null },
-  { cycle: 'yearly' as const, label: 'Pro · yearly', ngn: 4200 * 12, usd: 7 * 12, note: '2 months free' },
+  { cycle: 'monthly' as const, label: 'Pro · monthly', ngn: 7500, usd: 9, note: null },
+  { cycle: 'yearly' as const, label: 'Pro · yearly', ngn: 6250 * 12, usd: 7 * 12, note: '2 months free' },
 ]
 
 export default function Settings() {

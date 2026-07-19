@@ -13,7 +13,7 @@ type Currency = 'NGN' | 'USD'
 // Nigeria pays in naira — fair local pricing, not dollar-converted pain
 const PRICES: Record<string, Record<Currency, { m: number; y: number }>> = {
   Free: { NGN: { m: 0, y: 0 }, USD: { m: 0, y: 0 } },
-  Pro: { NGN: { m: 5000, y: 4200 }, USD: { m: 9, y: 7 } },
+  Pro: { NGN: { m: 7500, y: 6250 }, USD: { m: 9, y: 7 } },
 }
 const SYMBOL: Record<Currency, string> = { NGN: '₦', USD: '$' }
 

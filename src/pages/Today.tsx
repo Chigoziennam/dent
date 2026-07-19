@@ -827,13 +827,34 @@ function EnergyTank({ value, onChange }: { value: number; onChange: (n: number) 
     onChange(Math.min(5, Math.max(1, Math.ceil(((clientX - r.left) / r.width) * 5))))
   }
 
-  // Five discrete power cells instead of a liquid bar. Two reasons: a reactor
-  // reads as a reading you're taking, not a slider you're nudging — and the
-  // old version ran a CSS bubble-rise loop plus a flowing gradient forever,
-  // repainting the hero card even when nobody was looking at it. Everything
-  // here is transform/opacity and only moves on interaction.
+  // A reactor readout rather than a progress bar. Skewed cells give it the
+  // raked-forward look of a HUD; the filled ones carry a hot top edge and a
+  // bloom, the empty ones keep a faint chassis outline so you can still see
+  // the capacity you're not using. The whole thing is transforms and
+  // gradients — no looping animation, so it costs nothing while it sits there.
+  const SKEW = -12
+
   return (
     <div>
+      {/* readout bar */}
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="flex items-center gap-1.5">
+          <motion.span
+            key={t.label}
+            initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.18 }}
+            className="font-mono text-[11px] font-bold uppercase tracking-[0.18em]"
+            style={{ color: t.color, textShadow: `0 0 12px ${t.color}66` }}
+          >
+            {t.label}
+          </motion.span>
+        </span>
+        <span className="flex items-center gap-1 font-mono text-[11px] font-bold" style={{ color: t.color }}>
+          <Zap size={10} fill="currentColor" />
+          {value * 20}<span className="text-muted">%</span>
+        </span>
+      </div>
+
       <div
         ref={trackRef}
         role="slider"
@@ -850,82 +871,72 @@ function EnergyTank({ value, onChange }: { value: number; onChange: (n: number) 
         onPointerMove={e => { if (dragging) setFromX(e.clientX) }}
         onPointerUp={() => setDragging(false)}
         onPointerCancel={() => setDragging(false)}
-        className={`relative flex h-16 touch-none select-none items-center gap-1.5 rounded-2xl border p-2 outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        className={`relative flex h-[54px] touch-none select-none items-stretch gap-[5px] rounded-xl border p-[5px] outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         style={{
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(0,0,0,0.25))',
-          borderColor: dragging ? `${t.color}66` : 'var(--edge)',
+          background: 'linear-gradient(180deg, rgba(0,0,0,0.45), rgba(0,0,0,0.2))',
+          borderColor: dragging ? `${t.color}55` : 'var(--edge)',
           boxShadow: dragging
-            ? `0 0 30px ${t.color}30, inset 0 1px 0 rgba(255,255,255,0.07)`
-            : 'inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -8px 20px rgba(0,0,0,0.25)',
+            ? `0 0 34px ${t.color}2e, inset 0 2px 10px rgba(0,0,0,0.6)`
+            : 'inset 0 2px 10px rgba(0,0,0,0.55), inset 0 -1px 0 rgba(255,255,255,0.05)',
           transition: 'border-color 0.2s, box-shadow 0.2s',
         }}
       >
         {TANK.map(lv => {
           const lit = lv.n <= value
+          const leading = lv.n === value
           return (
-            <motion.div
-              key={lv.n}
-              className="relative h-full flex-1 overflow-hidden rounded-lg"
-              animate={{
-                // The leading cell sits slightly proud — that's what makes the
-                // row read as a level rather than five separate buttons.
-                scaleY: lit ? (lv.n === value ? 1 : 0.86) : 0.62,
-                opacity: lit ? 1 : 0.35,
-              }}
-              transition={{ type: 'spring', stiffness: 420, damping: 26 }}
-              style={{
-                background: lit
-                  ? `linear-gradient(180deg, ${t.color}f2, ${t.color}66)`
-                  : 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))',
-                boxShadow: lit
-                  ? `0 0 14px ${t.color}88, inset 0 1px 0 rgba(255,255,255,0.45)`
-                  : 'inset 0 1px 0 rgba(255,255,255,0.05)',
-              }}
-            >
-              {/* specular strip — turns a flat block into a lit cell */}
+            <div key={lv.n} className="relative flex-1 overflow-hidden rounded-[5px]"
+              style={{ transform: `skewX(${SKEW}deg)`, background: 'rgba(255,255,255,0.035)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)' }}>
+              <motion.div
+                className="absolute inset-0"
+                initial={false}
+                animate={{ opacity: lit ? 1 : 0, y: lit ? 0 : 14 }}
+                transition={{ type: 'spring', stiffness: 460, damping: 30, delay: lit ? lv.n * 0.03 : 0 }}
+                style={{
+                  background: `linear-gradient(180deg, ${t.color} 0%, ${t.color}cc 38%, ${t.color}4d 100%)`,
+                  boxShadow: `inset 0 0 14px ${t.color}80`,
+                }}
+              />
+              {/* hot top edge — where the light actually comes from */}
               {lit && (
-                <span className="pointer-events-none absolute inset-x-0 top-0 h-1/3 rounded-t-lg"
-                  style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.4), transparent)' }} />
+                <motion.span
+                  layoutId={leading ? 'tank-edge' : undefined}
+                  className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
+                  style={{ background: '#fff', opacity: leading ? 0.95 : 0.5, filter: `drop-shadow(0 0 6px ${t.color})` }}
+                />
               )}
-            </motion.div>
+              {/* the leading cell blooms so the eye lands on the current level */}
+              {leading && (
+                <span className="pointer-events-none absolute inset-0"
+                  style={{ background: `radial-gradient(120% 90% at 50% 0%, ${t.color}80, transparent 70%)` }} />
+              )}
+            </div>
           )
         })}
-
-        {/* Reading, in the corner like an instrument. */}
-        <AnimatePresence mode="wait">
-          <motion.span
-            key={t.label}
-            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.15 }}
-            className="pointer-events-none absolute -top-0.5 right-2.5 flex items-center gap-1 font-mono text-[10px] font-bold uppercase tracking-[0.16em]"
-            style={{ color: t.color, textShadow: `0 0 10px ${t.color}55` }}
-          >
-            <Zap size={9} fill="currentColor" />{value}/5
-          </motion.span>
-        </AnimatePresence>
       </div>
 
-      {/* Each label is its own tap target — dragging is the shortcut, not the
-          only way in. */}
-      <div className="mt-1.5 flex">
+      {/* each label is its own tap target — dragging is the shortcut, not the only way in */}
+      <div className="mt-1.5 flex gap-[5px]">
         {TANK.map(lv => (
           <button
             key={lv.n} type="button" onClick={() => onChange(lv.n)}
             aria-pressed={value === lv.n}
-            className={`flex-1 rounded text-center text-[9.5px] font-medium uppercase tracking-wide transition-colors focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${value === lv.n ? 'text-primary' : 'text-muted hover:text-secondary'}`}
+            className={`flex-1 rounded text-center text-[9px] font-semibold uppercase tracking-wide transition-colors focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${value === lv.n ? '' : 'text-muted hover:text-secondary'}`}
+            style={value === lv.n ? { color: t.color } : undefined}
           >
             {lv.label}
           </button>
         ))}
       </div>
+
       <AnimatePresence mode="wait">
         <motion.div
           key={value}
           initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.15 }}
-          className="mt-1 text-center text-[11px] text-secondary"
+          className="mt-1.5 text-center text-[11px] text-secondary"
         >
-          <span className="font-semibold" style={{ color: t.color }}>{t.label}</span> — {t.desc}
+          {t.desc}
         </motion.div>
       </AnimatePresence>
     </div>

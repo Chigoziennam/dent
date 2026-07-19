@@ -37,7 +37,7 @@
       "parameters": {
         "operation": "getAll",
         "tableId": "ship_events",
-        "limit": "={{ $json.shipLimit }}",
+        "limit": "={{ $('Resolve window').first().json.shipLimit }}",
         "orderBy": "created_at.desc",
         "matchType": "allFilters",
         "filters": {
@@ -45,12 +45,12 @@
             {
               "keyName": "user_id",
               "condition": "eq",
-              "keyValue": "={{ $json.userFilter }}"
+              "keyValue": "={{ $('Resolve window').first().json.userFilter }}"
             },
             {
               "keyName": "event_date",
               "condition": "gte",
-              "keyValue": "={{ $json.since }}"
+              "keyValue": "={{ $('Resolve window').first().json.since }}"
             }
           ]
         }

@@ -280,6 +280,9 @@ export default function Write() {
                     </button>
                   </span>
                 </div>
+                <div className="pb-1 font-mono text-[10px] text-accent">
+                  {activeEvents.length} of {sourceEvents.length} feeding the post
+                </div>
                 {sourceEvents.slice(0, 40).map(e => {
                   const out = excluded.has(e.id)
                   return (
@@ -289,6 +292,12 @@ export default function Write() {
                       aria-label={`${out ? 'Include' : 'Leave out'} ${e.title}`}
                       className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${out ? 'border-line/50 bg-transparent opacity-40' : 'border-line bg-white/[0.02]'}`}
                     >
+                      {/* Same checkbox affordance as Fusion. The old row only
+                          signalled inclusion by opacity, so "is this in or
+                          out?" was a guess at a glance. */}
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] transition-colors ${out ? 'border-line' : 'border-accent bg-accent text-white'}`}>
+                        {!out && '✓'}
+                      </span>
                       <CategoryPill category={e.category} />
                       <span className={`truncate text-xs ${out ? 'text-muted line-through' : 'text-secondary'}`}>{e.title}</span>
                       <span className="ml-auto shrink-0 font-mono text-[9px] uppercase tracking-wide text-muted">

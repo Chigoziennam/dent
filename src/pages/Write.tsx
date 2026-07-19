@@ -48,7 +48,13 @@ export default function Write() {
   const [generating, setGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [contextOpen, setContextOpen] = useState(false)
+  // Open by default: this section IS the choosing, and collapsing it on
+  // mobile hid the checkboxes and bulk controls behind an unmarked tap.
+  const [contextOpen, setContextOpen] = useState(true)
+  // Quick lens over the source material. Writing about "just this week's
+  // commits" or "only the milestones" is a normal ask — without these you
+  // have to untap thirty rows by hand to get there.
+  const [lens, setLens] = useState<'all' | 'code' | 'wins' | 'week'>('all')
   const [proNudge, setProNudge] = useState(false)
 
   // Accept a draft handed over from the Week page
@@ -85,7 +91,7 @@ export default function Write() {
   // out. This is how you talk about exactly the commits you choose — the
   // site offers them, you decide.
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
-  useEffect(() => { setExcluded(new Set()) }, [range, focusRepo, source])
+  useEffect(() => { setExcluded(new Set()) }, [range, focusRepo, source, lens])
   const toggleShip = (id: string) => setExcluded(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id)
@@ -97,10 +103,17 @@ export default function Write() {
   // customer call — used to be pushed past the display cut and become
   // invisible. They are usually the ships most worth writing about.
   const sourceEvents = useMemo(() => {
-    const filtered = rangeEvents.filter(e =>
-      source === 'all' ? true : source === 'github' ? e.source === 'github' : e.source !== 'github')
+    const weekAgo = format(subDays(new Date(), 7), 'yyyy-MM-dd')
+    const filtered = rangeEvents.filter(e => {
+      if (source === 'github' && e.source !== 'github') return false
+      if (source === 'manual' && e.source === 'github') return false
+      if (lens === 'code') return e.category === 'commit' || e.category === 'deployment' || e.category === 'bugfix'
+      if (lens === 'wins') return ['milestone', 'revenue', 'customer', 'launch', 'feature'].includes(e.category)
+      if (lens === 'week') return e.eventDate >= weekAgo
+      return true
+    })
     return [...filtered.filter(e => e.source !== 'github'), ...filtered.filter(e => e.source === 'github')]
-  }, [rangeEvents, source])
+  }, [rangeEvents, source, lens])
 
   const activeEvents = useMemo(() => sourceEvents.filter(e => !excluded.has(e.id)), [sourceEvents, excluded])
 
@@ -240,6 +253,21 @@ export default function Write() {
                   </button>
                 ))}
               </div>
+              <div className="no-scrollbar mb-2 flex items-center gap-1.5 overflow-x-auto">
+                <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted">Show</span>
+                {([
+                  { k: 'all' as const, label: 'All' },
+                  { k: 'week' as const, label: 'Last 7 days' },
+                  { k: 'code' as const, label: 'Code only' },
+                  { k: 'wins' as const, label: 'Wins only' },
+                ]).map(o => (
+                  <button key={o.k} type="button" onClick={() => setLens(o.k)}
+                    aria-pressed={lens === o.k}
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${lens === o.k ? 'border-accent/60 bg-accent/15 text-accent' : 'border-line text-muted hover:text-secondary'}`}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
               {/* Repo focus narrows the GitHub side only — manual ships belong
                   to the project story whichever repo they touched. */}
               {rangeRepos.length > 0 && source !== 'manual' && (
@@ -265,24 +293,26 @@ export default function Write() {
                 {/* Untapping 30 ships one at a time to write about two is not
                     a workflow. Bulk controls make the narrow post as cheap as
                     the wide one. */}
-                <div className="flex items-center justify-between gap-2 pb-1">
-                  <span className="text-[10.5px] text-muted">Tap a ship to leave it out — the post only uses what&apos;s lit.</span>
-                  <span className="flex shrink-0 gap-1">
-                    <button type="button" onClick={() => setExcluded(new Set())}
-                      disabled={excluded.size === 0}
-                      className="rounded-md border border-line px-2 py-0.5 text-[10px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
-                      Use all
-                    </button>
-                    <button type="button" onClick={() => setExcluded(new Set(sourceEvents.map(e => e.id)))}
-                      disabled={excluded.size === sourceEvents.length}
-                      className="rounded-md border border-line px-2 py-0.5 text-[10px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
-                      Clear
-                    </button>
+                {/* Bulk controls lead, on their own left-aligned row. They
+                    used to sit at the right end of a justify-between row, and
+                    the card is wider than a phone viewport — so they rendered
+                    at x=650 in a 550px window and were simply never seen. */}
+                <div className="flex flex-wrap items-center gap-1.5 pb-1.5">
+                  <button type="button" onClick={() => setExcluded(new Set())}
+                    disabled={excluded.size === 0}
+                    className="rounded-md border border-line px-2.5 py-1 text-[11px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
+                    Select all
+                  </button>
+                  <button type="button" onClick={() => setExcluded(new Set(sourceEvents.map(e => e.id)))}
+                    disabled={excluded.size === sourceEvents.length}
+                    className="rounded-md border border-line px-2.5 py-1 text-[11px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
+                    Clear all
+                  </button>
+                  <span className="font-mono text-[10.5px] text-accent">
+                    {activeEvents.length} of {sourceEvents.length} feeding the post
                   </span>
                 </div>
-                <div className="pb-1 font-mono text-[10px] text-accent">
-                  {activeEvents.length} of {sourceEvents.length} feeding the post
-                </div>
+                <div className="pb-1 text-[10.5px] text-muted">Tap a ship to leave it out — the post only uses what&apos;s lit.</div>
                 {sourceEvents.slice(0, 40).map(e => {
                   const out = excluded.has(e.id)
                   return (
@@ -312,8 +342,8 @@ export default function Write() {
           ) : mode === 'fusion' ? (
             <div className="glass flex flex-col p-5">
               <SectionTitle>Step 1 · Pick your ships</SectionTitle>
-              <div className="mb-2.5 flex items-center justify-between gap-2">
-                <p className="text-xs leading-relaxed text-muted">
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+                <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted">
                   Tap the events that belong in this post — they become the facts.
                 </p>
                 <span className="flex shrink-0 gap-1">
@@ -344,7 +374,7 @@ export default function Write() {
                   </button>
                 ))}
               </div>
-              <div className="no-scrollbar max-h-56 space-y-1.5 overflow-y-auto pr-1">
+              <div className="no-scrollbar max-h-56 space-y-1.5 overflow-y-auto overflow-x-hidden pr-1">
                 {pickable.map(e => {
                   const on = picked.has(e.id)
                   return (

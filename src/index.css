@@ -406,3 +406,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Nothing should ever push the page sideways. Long ship titles and the
+   source-filter rows were widening the layout on narrow screens, which hid
+   the bulk-select controls off the right edge. */
+html, body { overflow-x: clip; max-width: 100vw; }

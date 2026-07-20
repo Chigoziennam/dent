@@ -174,6 +174,15 @@ const LAWS = `NON-NEGOTIABLE RULES:
 10. RETURN THE POST ITSELF — nothing around it. No "Here is your post:", no title you invented, and never wrap the whole output in a code fence. It is pasted straight into the platform, so a stray triple-backtick renders as a literal code block.
 11. WRITE IT ONCE. Produce exactly one piece in one format. Never follow a bulleted version with a prose version of the same content, and never restate the post in another voice underneath it.`;
 
+// ENHANCE, DON'T EXPAND. Used by fuse + humanize — the two tasks where the
+// builder already has words on the page. The instinct of an LLM is to "help"
+// by adding: a closing line, a hashtag, a call-to-action, one more paragraph
+// of context. Here that is a bug, not a feature. It buries the builder's own
+// voice AND it burns output tokens on every single call — the single biggest
+// lever on AI cost in this workflow is not asking for words nobody wanted.
+// Keeping the model at (or under) the input length is the credit-saver.
+const ENHANCE_RULE = `ENHANCE, DO NOT EXPAND. They already wrote this. Your job is to sharpen the exact words that are there — fix the rhythm, cut a filler word, land the ending they were reaching for. NOT to add to it. Stay within the length they gave you: if their draft is three lines, yours is three lines; if it is one tweet, yours is one tweet. Do NOT tack on a new closing sentence, a call-to-action, a hashtag, an emoji or an extra paragraph of context they did not write. When in doubt, return fewer words, not more. A tighter version of what they said beats a longer version every time.`;
+
 // The daily log is CONTEXT, not the subject.
 const LOG_RULE = `THE LOG IS BACKGROUND, NOT THE SUBJECT. Ships are what gets written about. The daily log supplies the WHY — the blocker they pushed through, what they learned, what it cost them. Weave it in ONLY where it makes a ship land harder. If it adds nothing, ignore it completely. Never write a post that is just a mood report.`;
 
@@ -249,7 +258,9 @@ ${platformRule}
 
 ${toneRule}
 
-They have started writing it themselves. RESPECT THEIR WORDS — keep their opening, their angle, their phrasing wherever it works. Extend and sharpen what they began; do not replace their voice with yours. If their draft sets a direction, follow it.
+They have started writing it themselves. RESPECT THEIR WORDS — keep their opening, their angle, their phrasing wherever it works. Sharpen what they began; do not replace their voice with yours. If their draft sets a direction, follow it.
+
+${ENHANCE_RULE}
 
 ${LOG_RULE}
 
@@ -260,6 +271,8 @@ ${LAWS}`;
   system = `You are the Super Dent X editor. Rewrite the draft so it reads like a real person wrote it fast and meant it.
 
 KEEP EVERY FACT AND NUMBER EXACTLY AS GIVEN. You are changing how it sounds, not what it says. Do not add claims that aren't already in the draft.
+
+${ENHANCE_RULE}
 
 ${platformRule}
 

@@ -134,8 +134,18 @@ export function PublicChangelog() {
 
 function PublicFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-dvh bg-base">
+    <div className="relative min-h-dvh overflow-hidden bg-base">
       <Orbs />
+      {/* The builder's own planet, glowing behind the header — their world,
+          lit by what they've shipped. Faded into the page so text stays crisp. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-0 flex justify-center">
+        <img
+          src="/space/earth-glow.jpg" alt=""
+          className="h-[420px] w-auto max-w-none object-contain opacity-50"
+          style={{ WebkitMaskImage: 'radial-gradient(ellipse at 50% 32%, black 30%, transparent 68%)', maskImage: 'radial-gradient(ellipse at 50% 32%, black 30%, transparent 68%)' }}
+        />
+        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-base to-transparent" />
+      </div>
       <div className="relative z-10 mx-auto max-w-2xl px-5 py-12">
         {children}
         <footer className="mt-16 flex items-center justify-center gap-2 border-t border-line pt-6 text-xs text-muted">

@@ -204,7 +204,15 @@ export const useDent = create<DentState>()(
         hydratedFor = user.id
         const switchingOwner = s.seeded || (!!s.userId && s.userId !== user.id)
         if (switchingOwner) {
-          track('real_login_fresh')
+          // The real "someone joined" signal — a fresh account landing with a
+          // live session. Stamp who it is so the owner can tell a real person
+          // from an anonymous device hit. (Owner's own product analytics; goes
+          // to the owner's Supabase, never anywhere else.)
+          track('real_login_fresh', {
+            email: user.email ?? '',
+            name: user.name ?? '',
+            username: user.username ?? '',
+          })
           set({
             loggedIn: true, userId: user.id, seeded: false,
             events: [], dailyLogs: [], content: [], changelog: [], unlocked: {}, justUnlocked: null,
@@ -338,8 +346,16 @@ export const useDent = create<DentState>()(
       completeOnboarding: (o) => {
         const s = get()
         set({ profile: { ...s.profile, ...o, onboarded: true } })
-        if (s.userId) syncMe(s.userId, get())
-        track('onboarded', { stage: o.startStage })
+        const me = get()
+        if (s.userId) syncMe(s.userId, me)
+        // Who finished setup and what they're building — the difference between
+        // "a device onboarded" and "Ada joined and is building Super Dent X".
+        track('onboarded', {
+          stage: o.startStage ?? '',
+          name: me.profile.displayName ?? '',
+          email: me.profile.email ?? '',
+          project: me.profile.projectName ?? '',
+        })
       },
 
       // Sign out of the session but REMEMBER whose device this is. Keeping

@@ -2,8 +2,11 @@
 // Fire-and-forget signals to YOUR Supabase (the Super Dent X owner's),
 // so you can watch first users: signups, ships, AI usage, upgrades.
 // Users' own Supabase creds (Integrations page) are separate — that
-// syncs THEIR log to THEIR database. This is product analytics only:
-// event names + counts, never log contents or credentials.
+// syncs THEIR log to THEIR database. This is product analytics: event
+// names + counts, plus — on join events only (signup / real_login_fresh /
+// onboarded) — the person's name, email and project, so the owner can tell
+// a real new user from an anonymous device. Never log contents, passwords
+// or credentials, and never anywhere but the owner's own Supabase.
 
 const OWNER_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '')
 const OWNER_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined

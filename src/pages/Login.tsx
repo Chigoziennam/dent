@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Github, Mail, ArrowRight, Check, Eye, EyeOff, Sparkles } from 'lucide-react'
 import { useDent } from '../lib/store'
 import { supabase, supabaseReady } from '../lib/supabase'
+import { track } from '../lib/telemetry'
 import { SpaceBackdrop, Logo } from '../components/ui'
 
 type Mode = 'signin' | 'signup'
@@ -35,6 +36,10 @@ export default function Login() {
   const oauth = async (provider: 'github' | 'google') => {
     if (!supabaseReady) return enterDemo()
     setBusy(true); setError(null)
+    // Fires before the redirect leaves the page — records the intent + method.
+    // The identity (email/name) is captured for certain in realLogin once the
+    // session comes back, so this and real_login_fresh pair up per person.
+    track('signup', { method: provider })
     const { error } = await supabase!.auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${location.origin}/app/today` },
@@ -54,7 +59,12 @@ export default function Login() {
       })
       setBusy(false)
       if (error) setError(friendly(error.message))
-      else setNotice('Account created — check your inbox to confirm your email, then sign in.')
+      else {
+        // A real person just created an account — stamp it so the owner sees
+        // exactly who joined (email + how), not just an anonymous device.
+        track('signup', { method: 'email', email: email.trim(), needs_confirm: true })
+        setNotice('Account created — check your inbox to confirm your email, then sign in.')
+      }
     } else {
       const { error } = await supabase!.auth.signInWithPassword({ email: email.trim(), password })
       setBusy(false)

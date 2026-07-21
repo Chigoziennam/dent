@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, GitCommitHorizontal, Rocket, Sparkles, Brain, Trophy, ScrollText, Check } from 'lucide-react'
-import { Orbs, SpaceBackdrop, CountUp, Logo } from '../components/ui'
+import { Orbs, CountUp, Logo } from '../components/ui'
 import { Mascot } from '../components/Mascot'
 
 export default function Landing() {
@@ -27,13 +27,24 @@ export default function Landing() {
         </div>
       </nav>
 
-      {/* Hero */}
-      <section className="relative z-10 flex min-h-[88dvh] flex-col items-center justify-center px-5 text-center">
-        <SpaceBackdrop />
-        <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.12 } } }}>
+      {/* Hero — Earth rising over the Moon. The closeness is the whole point:
+          you're right there, watching your own world from just outside it. */}
+      <section className="relative z-10 flex min-h-[92dvh] flex-col items-center justify-center overflow-hidden px-5 text-center">
+        <div className="pointer-events-none absolute inset-0 -z-0">
+          <img
+            src="/space/earth-moon.jpg" alt="Earth seen from the surface of the Moon"
+            className="h-full w-full object-cover object-top"
+            fetchPriority="high"
+          />
+          {/* Legibility + blend into the page below */}
+          <div className="absolute inset-0 bg-gradient-to-b from-base/40 via-base/30 to-base" />
+          <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-base to-transparent" />
+        </div>
+        <motion.div className="relative z-10" initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.12 } } }}>
           <motion.h1
             variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut' } } }}
             className="text-[40px] font-bold leading-[1.05] tracking-tight md:text-[64px]"
+            style={{ textShadow: '0 2px 30px rgba(0,0,0,0.55)' }}
           >
             Build in Public.
             <br />
@@ -41,7 +52,8 @@ export default function Landing() {
           </motion.h1>
           <motion.p
             variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut' } } }}
-            className="mx-auto mt-5 max-w-[560px] text-[16px] leading-relaxed text-secondary md:text-lg"
+            className="mx-auto mt-5 max-w-[560px] text-[16px] font-medium leading-relaxed text-white/90 md:text-lg"
+            style={{ textShadow: '0 2px 20px rgba(0,0,0,0.75)' }}
           >
             Your AI companion that remembers every commit, every deploy, every milestone —
             and turns your work into content people love.
@@ -71,12 +83,16 @@ export default function Landing() {
         </motion.div>
       </section>
 
-      {/* Transformation animation */}
-      <section id="how" className="relative z-10 mx-auto max-w-2xl px-5 py-20">
+      {/* Transformation animation — set against the solar system: one small
+          input, a whole system of outputs orbiting out from it. */}
+      <section id="how" className="relative z-10 overflow-hidden py-20">
+        <SectionBg src="/space/solar-system.jpg" dim={0.8} />
+        <div className="relative z-10 mx-auto max-w-2xl px-5">
         <div className="mb-6 flex justify-center"><Mascot size={96} /></div>
         <h2 className="text-center text-2xl font-bold tracking-tight md:text-3xl">One commit becomes everything.</h2>
         <p className="mt-2 text-center text-secondary">Watch your Tuesday afternoon turn into Friday's content.</p>
         <TransformationLoop />
+        </div>
       </section>
 
       {/* Proof-of-work profile showcase */}
@@ -198,15 +214,16 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="relative z-10 px-5 py-24 text-center">
+      {/* CTA — Earth at night, city lights on. Your work, lighting up the dark. */}
+      <section className="relative z-10 overflow-hidden px-5 py-28 text-center">
+        <SectionBg src="/space/earth-night.jpg" position="center 30%" dim={0.62} />
         <motion.h2
           initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-          className="text-3xl font-bold tracking-tight md:text-5xl"
+          className="relative z-10 text-3xl font-bold tracking-tight md:text-5xl"
         >
           Your work deserves to be seen.
         </motion.h2>
-        <motion.div whileTap={{ scale: 0.97 }} className="mt-8 inline-block">
+        <motion.div whileTap={{ scale: 0.97 }} className="relative z-10 mt-8 inline-block">
           <Link to="/login" className="sheen flex items-center gap-2 rounded-xl bg-accent px-8 py-4 text-base font-semibold text-white shadow-[0_0_40px_rgba(99,102,241,0.45)]">
             Track me while I build <ArrowRight size={18} />
           </Link>
@@ -219,6 +236,18 @@ export default function Landing() {
           <div>Built with Super Dent X · Powered by Nalto</div>
         </div>
       </footer>
+    </div>
+  )
+}
+
+// A space photo behind a section, dimmed enough to keep text readable and
+// faded top+bottom so sections blend into one continuous sky.
+function SectionBg({ src, position = 'center', dim = 0.72 }: { src: string; position?: string; dim?: number }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 -z-0 overflow-hidden">
+      <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" style={{ objectPosition: position }} />
+      <div className="absolute inset-0 bg-base" style={{ opacity: dim }} />
+      <div className="absolute inset-0 bg-gradient-to-b from-base via-transparent to-base" />
     </div>
   )
 }

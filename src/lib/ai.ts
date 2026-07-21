@@ -158,7 +158,7 @@ export interface ShipAnalysis {
 // A commit + a deploy logged "together" are two rows sharing one title and the
 // same minute. For the STORY they're one ship (told as an arc), so we collapse
 // them here — otherwise the post lists the same line two or three times.
-function dedupeShips(events: ShipEvent[]): ShipEvent[] {
+export function dedupeShips(events: ShipEvent[]): ShipEvent[] {
   const seen = new Set<string>()
   const out: ShipEvent[] = []
   for (const e of events) {

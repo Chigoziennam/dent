@@ -288,6 +288,34 @@ export function SectionTitle({ children }: { children: ReactNode }) {
   return <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">{children}</h2>
 }
 
+// A ship in steady orbit around the builder's Earth — the app is a cockpit in
+// low orbit. Pure CSS motion via offset-path (the .orbit-ship keyframe in
+// index.css), so it costs nothing and honours prefers-reduced-motion.
+export function EarthOrbit({ size = 132 }: { size?: number }) {
+  const c = size / 2
+  const rx = size * 0.46, ry = size * 0.185
+  // A flattened ellipse reads as a tilted orbital plane in 2D.
+  const path = `M ${c - rx},${c} a ${rx},${ry} 0 1,0 ${rx * 2},0 a ${rx},${ry} 0 1,0 ${-rx * 2},0`
+  return (
+    <div className="relative shrink-0 select-none" style={{ width: size, height: size }} aria-hidden>
+      <svg viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 h-full w-full overflow-visible">
+        <path d={path} fill="none" stroke="rgba(150,180,255,0.30)" strokeWidth="1" strokeDasharray="2 5" />
+      </svg>
+      <img
+        src="/space/earth-orbit.jpg" alt="" loading="lazy"
+        className="absolute left-1/2 top-1/2 rounded-full object-cover"
+        style={{ width: size * 0.62, height: size * 0.62, transform: 'translate(-50%,-50%)', boxShadow: '0 0 26px rgba(70,130,255,0.5), inset -7px -7px 20px rgba(0,0,0,0.55)' }}
+      />
+      <div
+        className="orbit-ship absolute left-0 top-0 text-base"
+        style={{ offsetPath: `path("${path}")`, offsetRotate: 'auto', animation: 'orbit-run 12s linear infinite', filter: 'drop-shadow(0 0 4px rgba(150,180,255,0.85))' }}
+      >
+        🛰️
+      </div>
+    </div>
+  )
+}
+
 export function Logo({ size = 24 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 180 180" aria-hidden>

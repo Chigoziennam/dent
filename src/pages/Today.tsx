@@ -5,9 +5,8 @@ import { format, subDays } from 'date-fns'
 import { Plus, Sparkles, PenLine, Search, CalendarRange, Flame, Hammer, SlidersHorizontal, Zap, Check } from 'lucide-react'
 import { useDent, todayStr } from '../lib/store'
 import { SOURCE_LABEL, CATEGORY_META, levelForXP, type Mood, type EventCategory } from '../lib/types'
-import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill, AICore } from '../components/ui'
+import { Page, GlassCard, XPBar, Checkmark, SectionTitle, CategoryPill, AICore, EarthOrbit } from '../components/ui'
 import { AddEventModal } from '../components/AddEventModal'
-import { Mascot } from '../components/Mascot'
 import { repoOf } from '../lib/github'
 import { Link } from 'react-router-dom'
 import { entitlementsFor, planState, daysLeft } from '../lib/plan'
@@ -309,9 +308,10 @@ export default function Today() {
           </div>
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.25, type: 'spring', stiffness: 200, damping: 18 }}
-            className="hidden shrink-0 sm:block"
+            className="relative z-10 shrink-0"
           >
-            <Mascot size={116} />
+            <span className="hidden sm:block"><EarthOrbit size={132} /></span>
+            <span className="block sm:hidden"><EarthOrbit size={92} /></span>
           </motion.div>
         </div>
 

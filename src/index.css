@@ -412,3 +412,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
    source-filter rows were widening the layout on narrow screens, which hid
    the bulk-select controls off the right edge. */
 html, body { overflow-x: clip; max-width: 100vw; }
+
+/* A ship in orbit — follows an elliptical path around the Earth. offset-path
+   keeps it on the ellipse; offset-rotate 'auto' banks it along the direction
+   of travel so it reads as flying, not sliding. */
+@keyframes orbit-run { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+@media (prefers-reduced-motion: reduce) { .orbit-ship { animation: none !important; } }

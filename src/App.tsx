@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useDent } from './lib/store'
 import { supabase } from './lib/supabase'
 import { flushSyncQueue, userFromSession } from './lib/sync'
+import { fetchGithubShips } from './lib/github'
 import { track } from './lib/telemetry'
 import InstallPrompt from './components/InstallPrompt'
 import Landing from './pages/Landing'
@@ -63,6 +64,42 @@ function SyncPulse() {
   return null
 }
 
+// GitHub, always current. The connection persists (token is in the store), but
+// nothing pulled new commits on its own — you had to open Integrations and hit
+// Sync, which made the whole thing feel "disconnected". This polls the saved
+// account in the background: on load, whenever you refocus the tab, and every
+// 8 minutes. importEvents is idempotent (dedupes on gh_<sha>) so re-pulling is
+// free — your log just keeps itself up to date with every new commit and deploy.
+function GithubPulse() {
+  const githubUser = useDent(s => s.creds.githubUser)
+  const githubToken = useDent(s => s.creds.githubToken)
+  const importEvents = useDent(s => s.importEvents)
+  const setCreds = useDent(s => s.setCreds)
+  useEffect(() => {
+    if (!githubUser) return
+    let cancelled = false
+    let inFlight = false
+    const pull = async () => {
+      if (inFlight || document.hidden) return
+      inFlight = true
+      try {
+        const ships = await fetchGithubShips({ user: githubUser, token: githubToken }, 30)
+        if (cancelled) return
+        const added = importEvents(ships)
+        setCreds({ githubLastSync: new Date().toISOString() })
+        if (added > 0) track('events_imported', { count: added, auto: true })
+      } catch { /* background sync stays silent — Integrations shows real errors */ }
+      finally { inFlight = false }
+    }
+    pull()
+    const onFocus = () => pull()
+    window.addEventListener('focus', onFocus)
+    const t = setInterval(pull, 8 * 60_000)
+    return () => { cancelled = true; window.removeEventListener('focus', onFocus); clearInterval(t) }
+  }, [githubUser, githubToken, importEvents, setCreds])
+  return null
+}
+
 function ThemeSync() {
   const theme = useDent(s => s.profile.theme ?? 'dark')
   useEffect(() => {
@@ -79,6 +116,7 @@ export default function App() {
       <ThemeSync />
       <AuthSync />
       <SyncPulse />
+      <GithubPulse />
       <InstallPrompt />
       <Suspense fallback={<RouteFallback />}>
       <Routes>

@@ -32,8 +32,9 @@ export default function Landing() {
       <section className="relative z-10 flex min-h-[92dvh] flex-col items-center justify-center overflow-hidden px-5 text-center">
         <div className="pointer-events-none absolute inset-0 -z-0">
           <img
-            src="/space/earth-moon.jpg" alt="Earth seen from the surface of the Moon"
-            className="h-full w-full object-cover object-top"
+            src="/space/earth-moon.jpg" alt="Earthrise — Earth seen from lunar orbit, Apollo 8"
+            className="h-full w-full object-cover"
+            style={{ objectPosition: '50% 42%' }}
             fetchPriority="high"
           />
           {/* Legibility + blend into the page below */}

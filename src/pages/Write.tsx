@@ -102,8 +102,11 @@ export default function Write() {
   // Hand-picking: every ship in range is IN by default; tap one to leave it
   // out. This is how you talk about exactly the commits you choose — the
   // site offers them, you decide.
-  const [excluded, setExcluded] = useState<Set<string>>(new Set())
-  useEffect(() => { setExcluded(new Set()) }, [range, focusRepo, source, lens, days])
+  // Opt-in: nothing is chosen until you tap it. Starts empty (a clean "clear
+  // all"), and resets to empty whenever the window/source/lens/days change, so
+  // you always start from a blank slate and add exactly the ships you want.
+  const [chosen, setChosen] = useState<Set<string>>(new Set())
+  useEffect(() => { setChosen(new Set()) }, [range, focusRepo, source, lens, days])
   // Day picks reset when the window or source underneath them changes — the
   // dates on offer are different, so a stale selection would silently hide
   // everything.
@@ -126,7 +129,7 @@ export default function Write() {
     for (const e of base) m.set(e.eventDate, (m.get(e.eventDate) ?? 0) + 1)
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([date, count]) => ({ date, count }))
   }, [rangeEvents, source])
-  const toggleShip = (id: string) => setExcluded(prev => {
+  const toggleShip = (id: string) => setChosen(prev => {
     const next = new Set(prev)
     if (next.has(id)) next.delete(id)
     else next.add(id)
@@ -150,7 +153,7 @@ export default function Write() {
     return [...filtered.filter(e => e.source !== 'github'), ...filtered.filter(e => e.source === 'github')]
   }, [rangeEvents, source, lens, days])
 
-  const activeEvents = useMemo(() => sourceEvents.filter(e => !excluded.has(e.id)), [sourceEvents, excluded])
+  const activeEvents = useMemo(() => sourceEvents.filter(e => chosen.has(e.id)), [sourceEvents, chosen])
 
   // What the Fusion picker offers. Manual ships sort FIRST, then the cap
   // applies — otherwise a busy commit week buries the milestone you actually
@@ -184,7 +187,7 @@ export default function Write() {
     if (mode === 'ships' && activeEvents.length === 0) {
       setGate(rangeEvents.length === 0
         ? 'No ships in this range yet — log something or sync GitHub first.'
-        : "Every ship is excluded — tap some back on so there's a story to tell.")
+        : 'Pick the ships you want in the post first — tap one or more below.')
       return
     }
     if (!tryUseAI()) {
@@ -382,7 +385,7 @@ export default function Write() {
           {mode === 'ships' ? (
             <div className="glass p-5">
               <button onClick={() => setContextOpen(o => !o)} className="flex w-full items-center justify-between lg:pointer-events-none">
-                <SectionTitle>Source Material · {activeEvents.length}{excluded.size > 0 ? ` of ${rangeEvents.length}` : ''} events</SectionTitle>
+                <SectionTitle>Source Material · {activeEvents.length > 0 ? `${activeEvents.length} of ${sourceEvents.length} chosen` : `${sourceEvents.length} events`}</SectionTitle>
                 <ChevronDown size={14} className={`text-muted transition-transform lg:hidden ${contextOpen ? 'rotate-180' : ''}`} />
               </button>
               {/* Where the material comes from. Manual ships (today's log,
@@ -444,46 +447,48 @@ export default function Write() {
                 </div>
               )}
               <div className={`space-y-2 ${contextOpen ? '' : 'hidden lg:block'}`}>
-                {/* Untapping 30 ships one at a time to write about two is not
-                    a workflow. Bulk controls make the narrow post as cheap as
-                    the wide one. */}
-                {/* Bulk controls lead, on their own left-aligned row. They
-                    used to sit at the right end of a justify-between row, and
-                    the card is wider than a phone viewport — so they rendered
-                    at x=650 in a 550px window and were simply never seen. */}
+                {/* The list only appears once you've picked a day (or days).
+                    Showing all 34+ ships up front was a wall of scrolling — the
+                    day cards are the index, and you drill into a day to choose
+                    from just that day's ships. */}
+                {dayBuckets.length > 1 && days.size === 0 ? (
+                  <div className="rounded-xl border border-dashed border-line/70 px-4 py-7 text-center">
+                    <div className="text-[13px] font-medium text-secondary">Pick a day above to see its ships</div>
+                    <div className="mt-1 text-[11px] text-muted">Then tap the ones you want in the post.</div>
+                  </div>
+                ) : (
+                <>
                 <div className="flex flex-wrap items-center gap-1.5 pb-1.5">
-                  <button type="button" onClick={() => setExcluded(new Set())}
-                    disabled={excluded.size === 0}
+                  <button type="button" onClick={() => setChosen(new Set(sourceEvents.map(e => e.id)))}
+                    disabled={chosen.size === sourceEvents.length && sourceEvents.length > 0}
                     className="rounded-md border border-line px-2.5 py-1 text-[11px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
                     Select all
                   </button>
-                  <button type="button" onClick={() => setExcluded(new Set(sourceEvents.map(e => e.id)))}
-                    disabled={excluded.size === sourceEvents.length}
+                  <button type="button" onClick={() => setChosen(new Set())}
+                    disabled={chosen.size === 0}
                     className="rounded-md border border-line px-2.5 py-1 text-[11px] font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-35">
                     Clear all
                   </button>
                   <span className="font-mono text-[10.5px] text-accent">
-                    {activeEvents.length} of {sourceEvents.length} feeding the post
+                    {activeEvents.length} of {sourceEvents.length} chosen
                   </span>
                 </div>
-                <div className="pb-1 text-[10.5px] text-muted">Tap a ship to leave it out — the post only uses what&apos;s lit.</div>
+                <div className="pb-1 text-[10.5px] text-muted">Tap the ships you want in — the post only uses the ones you choose.</div>
                 {sourceEvents.slice(0, 40).map(e => {
-                  const out = excluded.has(e.id)
+                  const on = chosen.has(e.id)
                   return (
                     <button
                       key={e.id} type="button" onClick={() => toggleShip(e.id)}
-                      aria-pressed={!out}
-                      aria-label={`${out ? 'Include' : 'Leave out'} ${e.title}`}
-                      className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${out ? 'border-line/50 bg-transparent opacity-40' : 'border-line bg-white/[0.02]'}`}
+                      aria-pressed={on}
+                      aria-label={`${on ? 'Remove' : 'Add'} ${e.title}`}
+                      className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none ${on ? 'border-accent/60 bg-accent/10' : 'border-line bg-white/[0.02] opacity-60 hover:opacity-100'}`}
                     >
-                      {/* Same checkbox affordance as Fusion. The old row only
-                          signalled inclusion by opacity, so "is this in or
-                          out?" was a guess at a glance. */}
-                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] transition-colors ${out ? 'border-line' : 'border-accent bg-accent text-white'}`}>
-                        {!out && '✓'}
+                      {/* Opt-in: filled check only once you've chosen the ship. */}
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] transition-colors ${on ? 'border-accent bg-accent text-white' : 'border-line'}`}>
+                        {on && '✓'}
                       </span>
                       <span className="shrink-0"><CategoryPill category={e.category} /></span>
-                      <span className={`min-w-0 flex-1 truncate text-xs ${out ? 'text-muted line-through' : 'text-secondary'}`}>{e.title}</span>
+                      <span className={`min-w-0 flex-1 truncate text-xs ${on ? 'text-secondary' : 'text-muted'}`}>{e.title}</span>
                       <span className="shrink-0 font-mono text-[9px] uppercase tracking-wide text-muted">
                         {e.source === 'github' ? (repoOf(e) ?? 'github') : 'yours'}
                       </span>
@@ -491,6 +496,8 @@ export default function Write() {
                   )
                 })}
                 {sourceEvents.length > 40 && <div className="pt-1 text-center font-mono text-[11px] text-muted">+ {sourceEvents.length - 40} more feeding the AI</div>}
+                </>
+                )}
               </div>
             </div>
           ) : mode === 'fusion' ? (
@@ -530,6 +537,12 @@ export default function Write() {
               </div>
               {/* Day picker — narrow the pickable ships to specific dates */}
               {dayPicker}
+              {dayBuckets.length > 1 && days.size === 0 ? (
+                <div className="rounded-xl border border-dashed border-line/70 px-4 py-7 text-center">
+                  <div className="text-[13px] font-medium text-secondary">Pick a day above to see its ships</div>
+                  <div className="mt-1 text-[11px] text-muted">Then tap the ones to fuse into the post.</div>
+                </div>
+              ) : (
               <div className="no-scrollbar max-h-56 space-y-1.5 overflow-y-auto overflow-x-hidden pr-1">
                 {pickable.map(e => {
                   const on = picked.has(e.id)
@@ -550,6 +563,7 @@ export default function Write() {
                   )
                 })}
               </div>
+              )}
               <div className="mt-1.5 text-right font-mono text-[10px] text-muted">{picked.size} selected</div>
               <SectionTitle>Step 2 · Your current state</SectionTitle>
               <p className="mb-2 text-xs leading-relaxed text-muted">

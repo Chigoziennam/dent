@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, GitCommitHorizontal, Rocket, Sparkles, Brain, Trophy, ScrollText, Check } from 'lucide-react'
 import { Orbs, CountUp, Logo } from '../components/ui'
 import { Mascot } from '../components/Mascot'
+import EarthSequence from '../components/EarthSequence'
 
 export default function Landing() {
   return (
@@ -27,20 +28,12 @@ export default function Landing() {
         </div>
       </nav>
 
-      {/* Hero — Earth rising over the Moon. The closeness is the whole point:
-          you're right there, watching your own world from just outside it. */}
-      <section className="relative z-10 flex min-h-[92dvh] flex-col items-center justify-center overflow-hidden px-5 text-center">
-        <div className="pointer-events-none absolute inset-0 -z-0">
-          <img
-            src="/space/earth-moon.jpg" alt="Earthrise — Earth seen from lunar orbit, Apollo 8"
-            className="h-full w-full object-cover"
-            style={{ objectPosition: '50% 42%' }}
-            fetchPriority="high"
-          />
-          {/* Legibility + blend into the page below */}
-          <div className="absolute inset-0 bg-gradient-to-b from-base/40 via-base/30 to-base" />
-          <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-base to-transparent" />
-        </div>
+      {/* Hero — a scroll-scrubbed zoom-out from Earth's surface into space (GSAP
+          ScrollTrigger over a 280-frame sequence rendered from the NASA Blue
+          Marble). You start right on the planet; as you scroll, it recedes and
+          the copy fades in against the stars. Falls back to a static poster on
+          reduced-motion / data-saver. */}
+      <EarthSequence>
         <motion.div className="relative z-10" initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.12 } } }}>
           <motion.h1
             variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut' } } }}
@@ -71,7 +64,7 @@ export default function Landing() {
                 Track me while I build <ArrowRight size={16} />
               </Link>
             </motion.div>
-            <a href="#how" className="text-[13px] text-muted transition-colors hover:text-secondary">
+            <a href="#how" className="text-[13px] font-medium text-white/80 transition-colors hover:text-white" style={{ textShadow: '0 1px 12px rgba(0,0,0,0.8)' }}>
               or see how it works ↓
             </a>
           </motion.div>
@@ -82,7 +75,7 @@ export default function Landing() {
             <TerminalWindow />
           </motion.div>
         </motion.div>
-      </section>
+      </EarthSequence>
 
       {/* Transformation animation — set against the solar system: one small
           input, a whole system of outputs orbiting out from it. */}
